@@ -1,0 +1,22 @@
+{
+  "name": "Skilleaze HQ",
+  "short_name": "Skilleaze HQ",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#042d7c",
+  "icons": [
+    {
+      "src": "/apple-touch-icon-hq.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
