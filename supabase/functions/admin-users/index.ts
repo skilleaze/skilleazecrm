@@ -24,7 +24,7 @@ Deno.serve(async (req) => {
   // who may manage whom
   const may = (role: string) =>
     me.role === 'management' ||
-    (me.role === 'ops' && (role === 'expert' || (me.ops_scope === 'head' && role === 'sales'))) ||
+    (me.role === 'ops' && (role === 'expert' || (me.ops_scope === 'head' && (role === 'sales' || role === 'cse')))) ||
     (me.role === 'manager' && role === 'cse');
 
   const body = await req.json().catch(() => ({}));
@@ -34,9 +34,22 @@ Deno.serve(async (req) => {
     const username = String(u.username || '').trim().toLowerCase();
     if (!/^[a-z0-9._-]{2,40}$/.test(username)) return { username, error: 'Bad username' };
     if (!may(u.role)) return { username, error: 'Not allowed for this role' };
-    if (String(u.password || '').length < 8) return { username, error: 'Password must be 8+ characters' };
-    const { data, error } = await admin.auth.admin.createUser({ email: `${username}@${DOMAIN}`, password: u.password, email_confirm: true });
-    if (error) return { username, error: error.message };
+    const pw = String(u.password || '').trim();
+    if (pw.length < 8) return { username, error: 'Password must be 8+ characters' };
+    const { data, error } = await admin.auth.admin.createUser({ email: `${username}@${DOMAIN}`, password: pw, email_confirm: true });
+    if (error) {
+      if (u.reset_existing && /already|registered|exists/i.test(error.message)) {
+        const p = await findProfile(username);
+        if (!p) return { username, error: 'Login exists but has no profile' };
+        if (!may(p.role)) return { username, error: 'Not allowed for this role' };
+        if (p.must_change_pw === false) return { username, own: true };
+        const { error: e3 } = await admin.auth.admin.updateUserById(p.id, { password: pw, ban_duration: p.active ? 'none' : undefined });
+        if (e3) return { username, error: e3.message };
+        await admin.from('profiles').update({ must_change_pw: true }).eq('id', p.id);
+        return { username, ok: true, reset: true };
+      }
+      return { username, error: error.message };
+    }
     const { error: e2 } = await admin.from('profiles').insert({
       id: data.user.id, username, full_name: u.full_name || username, role: u.role,
       ops_scope: u.ops_scope ?? null, agent_code: u.agent_code ?? null, expert_code: u.expert_code ?? null,
@@ -48,6 +61,13 @@ Deno.serve(async (req) => {
 
   try {
     switch (body.action) {
+      case 'list': {
+        const roles = ['management', 'ops', 'sales', 'expert', 'cse', 'manager'].filter(may);
+        const want = body.role ? [String(body.role)].filter(r => roles.includes(r)) : roles;
+        if (!want.length) return out({ users: [] });
+        const { data } = await admin.from('profiles').select('username, full_name, role, staff_id, agent_code, expert_code, active, last_login, must_change_pw, created_at').in('role', want).order('full_name');
+        return out({ users: data || [] });
+      }
       case 'create':
         return out(await create(body.user));
       case 'bulk_create': {
@@ -59,8 +79,9 @@ Deno.serve(async (req) => {
         const p = await findProfile(body.username);
         if (!p) return out({ error: 'User not found' }, 404);
         if (!may(p.role)) return out({ error: 'Not allowed' }, 403);
-        if (String(body.password || '').length < 8) return out({ error: 'Password must be 8+ characters' }, 400);
-        const { error } = await admin.auth.admin.updateUserById(p.id, { password: body.password });
+        const npw = String(body.password || '').trim();
+        if (npw.length < 8) return out({ error: 'Password must be 8+ characters' }, 400);
+        const { error } = await admin.auth.admin.updateUserById(p.id, { password: npw });
         if (error) return out({ error: error.message }, 400);
         await admin.from('profiles').update({ must_change_pw: true }).eq('id', p.id);
         return out({ ok: true });
@@ -73,13 +94,24 @@ Deno.serve(async (req) => {
         await admin.from('profiles').update({ active: !!body.active }).eq('id', p.id);
         return out({ ok: true });
       }
+      case 'delete': {
+        const p = await findProfile(body.username);
+        if (!p) return out({ ok: true, gone: true });
+        if (!may(p.role) || p.id === me.id || p.role === 'management') return out({ error: 'Not allowed' }, 403);
+        await admin.from('profiles').update({ active: false }).eq('id', p.id);
+        const { error } = await admin.auth.admin.deleteUser(p.id);
+        if (error) { await admin.auth.admin.updateUserById(p.id, { ban_duration: '876000h' }); return out({ ok: true, banned: true, note: error.message }); }
+        await admin.from('profiles').delete().eq('id', p.id);
+        return out({ ok: true });
+      }
       case 'update': {
         const p = await findProfile(body.username);
         if (!p) return out({ error: 'User not found' }, 404);
         if (!may(p.role)) return out({ error: 'Not allowed' }, 403);
         const f = body.fields || {};
         const allowed: Record<string, unknown> = {};
-        for (const k of ['full_name', 'title', 'agent_code', 'expert_code', 'staff_id', 'ops_scope', 'photo_path']) if (k in f) allowed[k] = f[k];
+        for (const k of ['full_name', 'title', 'staff_id', 'photo_path']) if (k in f) allowed[k] = f[k];
+        if (me.role === 'management') for (const k of ['agent_code', 'expert_code', 'ops_scope']) if (k in f) allowed[k] = f[k];
         if (me.role === 'management' && f.role) allowed.role = f.role;
         await admin.from('profiles').update(allowed).eq('id', p.id);
         return out({ ok: true });
