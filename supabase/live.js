@@ -125,6 +125,14 @@
     const keys = new Set([...Object.keys(next), ...Object.keys(prev)]);
     keys.forEach(k => {
       if (KV_SKIP.has(k) || TBL[k] || next[k] === undefined || prev[k] === next[k]) return;
+      if (k === 'users') { jobs.push(async () => {
+        const r = await c.from('app_kv').select('value').eq('key', 'users').maybeSingle();
+        const srv = (r && r.data && Array.isArray(r.data.value)) ? r.data.value : [], mine = next.users || [], was = new Set((prev.users || []).map(x => x.username)), now = new Set(mine.map(x => x.username));
+        const gone = new Set([...was].filter(x => !now.has(x))), m = new Map();
+        srv.forEach(x => { if (x && x.username && !gone.has(x.username)) m.set(x.username, x); });
+        mine.forEach(x => { if (x && x.username) m.set(x.username, { ...(m.get(x.username) || {}), ...x }); });
+        await c.from('app_kv').upsert({ key: 'users', value: kvValue('users', [...m.values()]), updated_at: new Date().toISOString() }, { onConflict: 'key' }).then(chk);
+      }); return; }
       jobs.push(() => c.from('app_kv').upsert({ key: k, value: kvValue(k, next[k]), updated_at: new Date().toISOString() }, { onConflict: 'key' }).then(chk));
       if (k === 'expertAgents') jobs.push(async () => {
         const rows = Object.entries(next.expertAgents || {}).flatMap(([e, ags]) => (ags || []).map(a => ({ expert_code: e, agent_code: a })));
@@ -199,5 +207,38 @@
     if (error) throw error; return (data || []).map(MAP.issues);
   }
 
-  window.SKZLive = { issuesFetch, lookupRemote, docUpload, docUrl, setPersonKey, on, sb, photosLoad, photoUpload, loadChanges, applyChanges, signIn, session, profile, profiles, signOut, changePassword, touch, load, push, admin, bulkCreate };
+
+  // Chat
+  const chatRowG = r => ({ id: r.id, name: r.name, branch: r.branch, kind: r.kind, auto: r.auto || null, members: r.members || [], removed: r.removed || [], photo: r.photo || '', at: Date.parse(r.updated_at || r.created_at) || 0 });
+  const chatRowM = r => ({ id: r.id, g: r.group_id, by: r.sender, t: r.body, at: Date.parse(r.created_at) || 0, iso: r.created_at });
+  async function chatLoad(since) { const c = sb(); const g = await c.from('chat_groups').select('*').eq('archived', false); if (g.error) throw g.error;
+    let q = c.from('chat_messages').select('id,group_id,sender,body,created_at').order('created_at', { ascending: true }).limit(3000);
+    q = since ? q.gt('created_at', since) : q.gte('created_at', new Date(Date.now() - 90 * 864e5).toISOString());
+    const m = await q; if (m.error) throw m.error; return { groups: (g.data || []).map(chatRowG), msgs: (m.data || []).map(chatRowM) }; }
+  async function chatSend(m) { const r = await sb().from('chat_messages').insert({ id: m.id, group_id: m.g, sender: m.by, body: m.t }).select('id,group_id,sender,body,created_at').single(); if (r.error) throw r.error; return chatRowM(r.data); }
+  async function chatGroupSave(g) { const row = { id: g.id, name: g.name || '', branch: g.branch === 'puttur' ? 'puttur' : 'cloud', kind: g.kind === 'dm' ? 'dm' : 'group', auto: g.auto || null, members: g.members || [], removed: g.removed || [], ...(g.photo !== undefined ? { photo: g.photo || null } : {}), updated_at: new Date().toISOString() };
+    const r = g.kind === 'dm' ? await sb().from('chat_groups').insert(row).select('*').single() : await sb().from('chat_groups').upsert(row).select('*').single();
+    if (r.error) { if (g.kind === 'dm' && /duplicate/i.test(r.error.message || '')) { const x = await sb().from('chat_groups').select('*').eq('id', g.id).single(); if (!x.error) return chatRowG(x.data); } throw r.error; } return chatRowG(r.data); }
+  async function chatGroupDel(id) { const r = await sb().from('chat_groups').update({ archived: true, updated_at: new Date().toISOString() }).eq('id', id); if (r.error) throw r.error; }
+
+
+  // ---- Notifications: realtime + web push ----
+  let rtCh = null;
+  function rtStart(cb) { try { const c = sb(); if (rtCh) { c.removeChannel(rtCh); rtCh = null; }
+      rtCh = c.channel('skz-alerts')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, p => { try { cb('chat', chatRowM(p.new)); } catch (e) {} })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'customer_issues' }, () => { try { cb('issue'); } catch (e) {} })
+        .subscribe(); } catch (e) {} }
+  function rtStop() { try { if (rtCh) sb().removeChannel(rtCh); } catch (e) {} rtCh = null; }
+  async function pushSave(sub, username) { const j = sub.toJSON ? sub.toJSON() : sub; const r = await sb().from('push_subs').upsert({ endpoint: j.endpoint, username, p256dh: j.keys.p256dh, auth: j.keys.auth, ua: (navigator.userAgent || '').slice(0, 200) }, { onConflict: 'endpoint' }); if (r.error) throw r.error; return true; }
+  async function pushRemove(endpoint) { try { await sb().from('push_subs').delete().eq('endpoint', endpoint); } catch (e) {} }
+  async function pushSend(body) { try { const r = await sb().functions.invoke('push-send', { body }); return r.data || null; } catch (e) { return null; } }
+
+  async function chatMediaUp(path, blob) { const r = await sb().storage.from('chat').upload(path, blob, { upsert: false, contentType: blob.type || 'application/octet-stream', cacheControl: '31536000' }); if (r.error) throw r.error; return path; }
+  async function chatMediaUrl(path) { const r = await sb().storage.from('chat').createSignedUrl(path, 60 * 60 * 6); if (r.error) throw r.error; return r.data && r.data.signedUrl; }
+  async function chatMediaPub(path, blob) { const c = sb(); const r = await c.storage.from('photos').upload(path, blob, { upsert: false, contentType: blob.type || 'application/octet-stream', cacheControl: '31536000' }); if (r.error) throw r.error; return c.storage.from('photos').getPublicUrl(path).data.publicUrl; }
+  async function chatDelete(id) { const r = await sb().from('chat_messages').delete().eq('id', id); if (r.error) throw r.error; return true; }
+  async function pushTest() { try { const r = await sb().functions.invoke('push-send', { body: { kind: 'test' } }); if (r.error) { let st = 0, msg = r.error.message || ''; try { st = r.error.context && r.error.context.status || 0; } catch (e) {} return { ok: false, status: st, msg }; } return { ok: true, data: r.data || {} }; } catch (e) { return { ok: false, status: 0, msg: (e && e.message) || 'network' }; } }
+  async function chatStorageTest(gid) { const c = sb(), path = String(gid || '').replace(/\|/g, ',') + '/check-' + Date.now().toString(36) + '.txt'; const r = await c.storage.from('chat').upload(path, new Blob(['ok'], { type: 'text/plain' }), { upsert: false, contentType: 'text/plain' }); if (r.error) return { ok: false, msg: r.error.message || 'upload failed' }; const u = await c.storage.from('chat').createSignedUrl(path, 60); try { await c.storage.from('chat').remove([path]); } catch (e) {} return u.error ? { ok: false, msg: 'upload ok, reading failed: ' + u.error.message } : { ok: true }; }
+  window.SKZLive = { chatMediaPub, chatDelete, pushTest, chatStorageTest, chatMediaUp, chatMediaUrl, rtStart, rtStop, pushSave, pushRemove, pushSend, chatLoad, chatSend, chatGroupSave, chatGroupDel, issuesFetch, lookupRemote, docUpload, docUrl, setPersonKey, on, sb, photosLoad, photoUpload, loadChanges, applyChanges, signIn, session, profile, profiles, signOut, changePassword, touch, load, push, admin, bulkCreate };
 })();
