@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documents · Stratt HQ</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#12253D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stratt HQ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+HQ.boot('documents', async function (ctx) {
+  var H = HQ, h = H.h, sb = ctx.sb, per = ctx.per;
+  var KINDS = ['RERA Form A', 'RERA Form B', 'RERA Form F', 'Tenancy contract', 'Passport', 'Emirates ID', 'Title deed', 'Trade licence', 'Invoice', 'Other'];
+  var all = (await H.inPeriod(sb.from('documents').select('*, profiles(full_name)'), 'created_at', per).order('created_at', { ascending: false })).data || [];
+  var rows = all.filter(function (r) { return H.matches(r, ctx.q); });
+  var upload = ctx.canEdit && h('button', { type: 'button', class: 'btn', onclick: function () {
+    var fields = [
+      { name: 'name', label: 'Document name', placeholder: 'Uses the file name if empty' },
+      { name: 'kind', label: 'Type', type: 'select', options: KINDS },
+      { name: 'file', label: 'File', type: 'file', required: true }
+    ];
+    H.formDialog({ title: 'Upload document', fields: fields, saveLabel: 'Upload', submit: async function (fd) {
+      var file = fd.get('file');
+      if (!file || !file.size) throw new Error('Choose a file.');
+      var path = ctx.user.id + '/' + Date.now() + '-' + file.name.replace(/[^\w.\-]+/g, '_');
+      var up = await sb.storage.from('documents').upload(path, file);
+      if (up.error) throw up.error;
+      var ins = await sb.from('documents').insert({ name: fd.get('name') || file.name, kind: fd.get('kind') || null, storage_path: path });
+      if (ins.error) throw ins.error;
+      await ctx.refresh();
+      H.toast('Uploaded');
+    } });
+  } }, H.icon('upload'), 'Upload document');
+  var open = function (r) {
+    return h('button', { type: 'button', class: 'btn sm ghost', onclick: async function () {
+      var x = await sb.storage.from('documents').createSignedUrl(r.storage_path, 120);
+      if (x.error) H.toast(x.error.message, true); else window.open(x.data.signedUrl, '_blank', 'noopener');
+    } }, 'Open');
+  };
+  return [
+    H.pageHead(ctx, { eyebrow: 'Compliance', title: 'Documents and compliance', sub: 'Forms, contracts, IDs and licences, stored privately.', action: upload }),
+    H.kpis([
+      { label: 'Documents', value: String(all.length), note: per.label },
+      { label: 'Types', value: String(new Set(all.map(function (r) { return r.kind; }).filter(Boolean)).size), note: 'Distinct document types' },
+      { label: 'RERA forms', value: String(all.filter(function (r) { return (r.kind || '').indexOf('RERA') === 0; }).length), note: per.label },
+      { label: 'IDs and passports', value: String(all.filter(function (r) { return r.kind === 'Passport' || r.kind === 'Emirates ID'; }).length), note: per.label }
+    ]),
+    H.table({ title: 'Library', note: rows.length + ' files', rows: rows, empty: 'No documents yet.', columns: [
+      { key: 'name', label: 'Document', render: function (r) { return H.cell(r.name, r.profiles ? 'Uploaded by ' + r.profiles.full_name : null); } },
+      { key: 'kind', label: 'Type', render: function (r) { return r.kind ? H.badge(r.kind) : '–'; } },
+      { key: 'created_at', label: 'Added', render: function (r) { return H.fmtDate(r.created_at); } },
+      { key: 'x', label: 'Action', render: function (r) { return h('div', { class: 'actions' }, open(r), ctx.canEdit ? H.rowAction(ctx, { table: 'documents', id: r.id, remove: true, label: 'Remove', confirm: 'Remove this document from the library?' }) : null); } }
+    ] })
+  ];
+});
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
+</body>
+</html>

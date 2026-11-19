@@ -1,29 +1,16 @@
-// Skilleaze HQ · notifications service worker
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-
-self.addEventListener('push', e => {
-  let d = {};
-  try { d = e.data ? e.data.json() : {}; } catch (x) { d = { title: 'Skilleaze HQ', body: e.data ? e.data.text() : '' }; }
-  const title = d.title || 'Skilleaze HQ';
-  e.waitUntil((async () => {
-    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    const visible = wins.some(w => w.visibilityState === 'visible' && w.focused);
-    if (visible) { wins.forEach(w => w.postMessage({ skzPush: d })); return; }
-    await self.registration.showNotification(title, {
-      body: d.body || '', tag: d.tag || undefined, renotify: !!d.tag,
-      icon: '/icon-512.png', badge: '/favicon-hq.png',
-      data: { url: d.url || '/', type: d.type || '' }, vibrate: d.type === 'issue' ? [120, 60, 120, 60, 200] : [80, 40, 80]
-    });
-  })());
+// Stratt HQ service worker: app shell offline cache. Data always comes live from Supabase.
+var CACHE = 'stratt-hq-v1';
+var SHELL = ['/assets/app.css', '/assets/app.js', '/assets/config.js', '/assets/stratt-logo-navy.png', '/assets/icons/icon-192.png'];
+self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(SHELL); })); self.skipWaiting(); });
+self.addEventListener('activate', function (e) {
+  e.waitUntil(caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); })); }));
+  self.clients.claim();
 });
-
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || '/';
-  e.waitUntil((async () => {
-    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const w of wins) { if ('focus' in w) { w.postMessage({ skzOpen: url }); return w.focus(); } }
-    return self.clients.openWindow(url);
-  })());
+self.addEventListener('fetch', function (e) {
+  var u = new URL(e.request.url);
+  if (e.request.method !== 'GET' || u.origin !== location.origin) return;
+  e.respondWith(fetch(e.request).then(function (r) {
+    if (r.ok) { var copy = r.clone(); caches.open(CACHE).then(function (c) { c.put(e.request, copy); }); }
+    return r;
+  }).catch(function () { return caches.match(e.request); }));
 });

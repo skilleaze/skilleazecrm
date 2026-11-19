@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tasks · Stratt HQ</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#12253D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stratt HQ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+HQ.boot('tasks', async function (ctx) {
+  var H = HQ, h = H.h, sb = ctx.sb, per = ctx.per, t0 = H.today();
+  var res = await Promise.all([
+    H.inPeriod(sb.from('tasks').select('*, profiles(full_name)'), 'due_on', per).order('due_on', { ascending: true, nullsFirst: false }),
+    sb.from('profiles').select('id, full_name').eq('active', true).order('full_name')
+  ]);
+  var all = (res[0].data || []).filter(function (r) { return H.matches(r, ctx.q); }), people = res[1].data || [];
+  var rows = all.filter(function (t) { return !t.done; }).concat(all.filter(function (t) { return t.done; }));
+  var overdue = all.filter(function (t) { return !t.done && t.due_on && t.due_on < t0; });
+  return [
+    H.pageHead(ctx, { eyebrow: 'Workday', title: 'Tasks', sub: 'Follow-ups, viewings and approvals.',
+      action: H.addButton(ctx, { table: 'tasks', label: 'Add task', defaults: { assignee_id: ctx.user.id }, fields: [
+        { name: 'title', label: 'Task', required: true },
+        { name: 'due_on', label: 'Due', type: 'date', default: t0 },
+        { name: 'assignee_id', label: 'Assign to', type: 'select', options: people.map(function (p) { return [p.id, p.full_name]; }) }
+      ] }) }),
+    H.kpis([
+      { label: 'Open', value: String(all.filter(function (t) { return !t.done; }).length), note: per.label },
+      { label: 'Due today', value: String(all.filter(function (t) { return !t.done && t.due_on === t0; }).length), note: H.fmtDate(t0) },
+      { label: 'Overdue', value: String(overdue.length), note: 'Past due date', tone: overdue.length ? 'down' : '' },
+      { label: 'Completed', value: String(all.filter(function (t) { return t.done; }).length), note: per.label, tone: 'up' }
+    ]),
+    h('section', { class: 'card' },
+      h('div', { class: 'panel-title' }, h('h2', null, 'Task list'), h('span', { class: 'muted' }, rows.length + ' tasks')),
+      rows.length ? rows.map(function (t) {
+        var late = t.due_on && t.due_on < t0 && !t.done;
+        return h('div', { class: 'task' + (t.done ? ' done' : '') },
+          h('div', { class: 'txt' },
+            h('div', { style: { fontSize: '15px', lineHeight: 1.4 } }, t.title),
+            h('div', { class: 'muted', style: { color: late ? '#9B2F25' : '#6C5235' } }, (t.due_on ? 'Due ' + H.fmtDate(t.due_on) : 'No due date') + (t.profiles ? ' · ' + t.profiles.full_name : ''))),
+          H.rowAction(ctx, { table: 'tasks', id: t.id, patch: { done: !t.done }, label: t.done ? 'Reopen' : 'Done' }));
+      }) : h('div', { class: 'empty' }, 'No tasks.'))
+  ];
+});
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
+</body>
+</html>

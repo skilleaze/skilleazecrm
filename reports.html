@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reports · Stratt HQ</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#12253D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stratt HQ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+HQ.boot('reports', async function (ctx) {
+  var H = HQ, h = H.h, sb = ctx.sb, per = ctx.per, aed = H.aed;
+  var EXPORTS = [
+    ['transactions', 'Transactions', 'finance', 'month'], ['petty_cash', 'Petty cash', 'finance', 'entry_date'], ['urgent_payments', 'Urgent payments', 'finance', null], ['budget_lines', 'Budget', 'finance', null],
+    ['deals', 'Deals and commissions', 'deals', 'received_on'], ['marketing_spend', 'Marketing spend', 'marketing', 'month'],
+    ['payroll', 'Payroll', 'hr', 'month'], ['attendance', 'Attendance', 'hr', 'work_date'], ['employees', 'Team', 'hr', null],
+    ['leads', 'Leads', 'leads', 'created_at'], ['listings', 'Listings', 'listings', 'created_at'], ['clients', 'Clients', 'clients', 'created_at']
+  ];
+  var cf = ctx.access.finance.view ? ((await sb.from('monthly_cashflow').select('*')).data || []) : [];
+  var rows = cf.filter(function (r) { return H.within(r.month, per); }).reverse();
+  var cellCsv = function (v) { if (v == null) return ''; var t = typeof v === 'object' ? JSON.stringify(v) : String(v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+  var download = function (e) {
+    return h('button', { type: 'button', class: 'btn sm ghost', onclick: async function (ev) {
+      var b = ev.currentTarget; b.disabled = true; b.textContent = 'Preparing…';
+      var q = sb.from(e[0]).select('*').limit(50000);
+      if (e[3]) q = H.inPeriod(q, e[3], per);
+      var r = await q;
+      b.disabled = false; b.textContent = 'Download CSV';
+      if (r.error) { window.alert(r.error.message); return; }
+      var data = r.data || [], cols = data.length ? Object.keys(data[0]) : [];
+      var csv = [cols.join(',')].concat(data.map(function (x) { return cols.map(function (c) { return cellCsv(x[c]); }).join(','); })).join('\n');
+      var url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+      var a = h('a', { href: url, download: 'stratt-' + e[0] + '-' + per.id + '.csv' });
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } }, 'Download CSV');
+  };
+  return [
+    H.pageHead(ctx, { eyebrow: 'Insight', title: 'Reports', sub: 'Monthly summary and CSV exports for the modules you can see.', search: false }),
+    H.row(
+      H.table({ title: 'Monthly summary', rows: rows, empty: 'No finance data available to you.', columns: [
+        { key: 'month', label: 'Month', render: function (r) { return H.bold(H.monthLabel(r.month)); } },
+        { key: 'money_in', label: 'Money in', num: 1, render: function (r) { return aed(r.money_in); } },
+        { key: 'money_out', label: 'Money out', num: 1, render: function (r) { return aed(r.money_out); } },
+        { key: 'net', label: 'Net', num: 1, render: function (r) { return aed(r.net); } }
+      ] }),
+      H.table({ title: 'Exports', note: per.label, rows: EXPORTS.filter(function (e) { return ctx.access[e[2]].view; }), empty: 'No exports available.', columns: [
+        { key: '1', label: 'Data', render: function (e) { return H.bold(e[1]); } },
+        { key: 'x', label: 'Action', render: download }
+      ] }))
+  ];
+});
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
+</body>
+</html>

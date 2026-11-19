@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marketing · Stratt HQ</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#12253D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stratt HQ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+HQ.boot('marketing', async function (ctx) {
+  var H = HQ, sb = ctx.sb, per = ctx.per, sum = H.sum, aed = H.aed;
+  var CH = { listing_portal: 'Listing portal', marketing: 'Marketing', market_data: 'Market data' };
+  var all = (await H.inPeriod(sb.from('marketing_spend').select('*'), 'month', per).order('month', { ascending: false })).data || [];
+  var rows = all.filter(function (r) { return H.matches(r, ctx.q); });
+  var by = function (k) { return sum(all.filter(function (r) { return r.channel === k; }).map(function (r) { return r.amount_aed; })); };
+  var total = sum(all.map(function (r) { return r.amount_aed; })), items = {};
+  all.forEach(function (r) { items[r.item] = (items[r.item] || 0) + Number(r.amount_aed); });
+  return [
+    H.pageHead(ctx, { eyebrow: 'Marketing', title: 'Marketing and portals', sub: 'Listing portal, market data and marketing spend.',
+      action: ctx.canEdit && H.addButton(ctx, { table: 'marketing_spend', label: 'Add spend', fields: [
+        { name: 'item', label: 'Item', required: true },
+        { name: 'channel', label: 'Channel', type: 'select', required: true, options: Object.entries(CH) },
+        { name: 'amount_aed', label: 'Amount in AED', type: 'number', required: true },
+        { name: 'month', label: 'Month', type: 'month', required: true }
+      ] }) }),
+    H.kpis([
+      { label: 'Portal spend', value: aed(by('listing_portal')), note: per.label },
+      { label: 'Marketing spend', value: aed(by('marketing')), note: per.label },
+      { label: 'Market data', value: aed(by('market_data')), note: per.label },
+      { label: 'Total', value: aed(total), note: all.length + ' items' }
+    ]),
+    H.row(
+      H.table({ title: 'Spend', note: rows.length + ' items', rows: rows, empty: 'No spend recorded in ' + per.label + '.', columns: [
+        { key: 'item', label: 'Item', render: function (r) { return H.bold(r.item); } },
+        { key: 'channel', label: 'Channel', render: function (r) { return H.badge(CH[r.channel] || r.channel); } },
+        { key: 'month', label: 'Month', render: function (r) { return H.monthLabel(r.month); } },
+        { key: 'amount_aed', label: 'Amount', num: 1, render: function (r) { return aed(r.amount_aed); } }
+      ] }),
+      H.side({ title: 'By item', note: per.label, empty: 'No spend in this period.', items: Object.entries(items).sort(function (a, b) { return b[1] - a[1]; }).map(function (e) { return { label: e[0], value: aed(e[1]), pct: total ? Math.round(e[1] / total * 100) : 0 }; }) }))
+  ];
+});
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
+</body>
+</html>

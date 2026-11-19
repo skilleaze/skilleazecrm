@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finance · Stratt HQ</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#12253D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stratt HQ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+HQ.boot('finance', async function (ctx) {
+  var H = HQ, h = H.h, sb = ctx.sb, per = ctx.per, sum = H.sum, aed = H.aed, q = ctx.q, canEdit = ctx.canEdit;
+  var TABS = [['cash', 'Cash flow'], ['pl', 'Profit and loss'], ['petty', 'Petty cash'], ['urgent', 'Urgent payments'], ['budget', 'Budget']];
+  var TONE = { overdue: 'danger', outstanding: 'warning', under_review: '', paid: 'success' };
+  var CATS = Object.entries(H.CATEGORY_LABELS), EXP = CATS.filter(function (c) { return c[0] !== 'commission'; });
+  var tab = TABS.some(function (t) { return t[0] === ctx.tab; }) ? ctx.tab : 'cash';
+  var res = await Promise.all([
+    sb.from('transactions').select('*').order('month'),
+    sb.from('petty_cash').select('*').order('entry_date', { ascending: false }),
+    sb.from('urgent_payments').select('*').order('created_at'),
+    sb.from('budget_lines').select('*').order('annual_aed', { ascending: false })
+  ]);
+  var all = res[0].data || [], petty = res[1].data || [], urgent = res[2].data || [], budget = res[3].data || [];
+  var pt = all.filter(function (r) { return H.within(r.month, per); });
+  var tot = function (rows, dir) { return sum(rows.filter(function (r) { return r.direction === dir; }).map(function (r) { return r.amount_aed; })); };
+  var catSum = function (rows, k) { return sum(rows.filter(function (r) { return r.direction === 'out' && r.category === k; }).map(function (r) { return r.amount_aed; })); };
+  var incP = tot(pt, 'in'), expP = tot(pt, 'out');
+  var open = urgent.filter(function (x) { return x.status !== 'paid'; }), outstanding = sum(open.map(function (x) { return x.amount_aed; }));
+  var body, action = null, sub = '';
+  var del = function (table, r) { return canEdit ? H.rowAction(ctx, { table: table, id: r.id, remove: true, label: 'Delete', confirm: 'Delete this entry?' }) : null; };
+
+  if (tab === 'cash') {
+    sub = 'Money in and out each month.';
+    var months = Array.from(new Set(all.map(function (r) { return H.ym(r.month); }))).sort(), run = 0;
+    var rows = months.map(function (m) {
+      var r = all.filter(function (x) { return H.ym(x.month) === m; }), i = tot(r, 'in'), o = tot(r, 'out');
+      run += i - o;
+      return { m: m, i: i, o: o, n: i - o, run: run };
+    }).filter(function (r) { return H.within(r.m, per); }).reverse();
+    if (canEdit) action = H.addButton(ctx, { table: 'transactions', label: 'Add transaction', fields: [
+      { name: 'month', label: 'Month', type: 'month', required: true },
+      { name: 'direction', label: 'Direction', type: 'select', required: true, options: [['in', 'Money in'], ['out', 'Money out']] },
+      { name: 'category', label: 'Category', type: 'select', required: true, options: CATS },
+      { name: 'description', label: 'Description' },
+      { name: 'amount_aed', label: 'Amount in AED', type: 'number', required: true }
+    ] });
+    body = H.row(
+      H.table({ title: 'Monthly cash flow', rows: rows, empty: 'No records for ' + per.label + '.', columns: [
+        { key: 'm', label: 'Month', render: function (r) { return H.bold(H.monthLabel(r.m)); } },
+        { key: 'i', label: 'Money in', num: 1, render: function (r) { return aed(r.i); } },
+        { key: 'o', label: 'Money out', num: 1, render: function (r) { return aed(r.o); } },
+        { key: 'n', label: 'Net', num: 1, render: function (r) { return aed(r.n); } },
+        { key: 'run', label: 'Running total', num: 1, render: function (r) { return aed(r.run); } }
+      ] }),
+      H.side({ title: 'Where the money went', note: per.label, empty: 'No expenses in this period.', items: EXP.map(function (c) { return { label: c[1], v: catSum(pt, c[0]) }; }).filter(function (c) { return c.v > 0; }).map(function (c) { return { label: c.label, value: aed(c.v), pct: expP ? Math.round(c.v / expP * 100) : 0 }; }) }));
+  }
+
+  if (tab === 'pl') {
+    sub = 'Income statement from recorded transactions.';
+    var sets = per.all ? [['All time', all]] : [[per.label, pt], ['All time', all]];
+    var line = function (name, fn, total) { return { name: name, vals: sets.map(function (x) { return fn(x[1]); }), __total: total }; };
+    var plRows = [line('Commission income', function (r) { return tot(r, 'in'); })]
+      .concat(EXP.map(function (c) { return line(c[1], function (r) { return -catSum(r, c[0]); }); }).filter(function (x) { return x.vals.some(function (v) { return v !== 0; }); }))
+      .concat([line('Total expenses', function (r) { return -tot(r, 'out'); }, true), line('Net result', function (r) { return tot(r, 'in') - tot(r, 'out'); }, true)]);
+    body = H.table({ title: 'Income statement, AED', rows: plRows, columns: [{ key: 'name', label: 'Line' }].concat(sets.map(function (x, i) { return { key: 'v' + i, label: x[0], num: 1, render: function (r) { return aed(r.vals[i]); } }; })) });
+  }
+
+  if (tab === 'petty') {
+    sub = 'Petty cash book.';
+    var pr = petty.filter(function (p) { return H.within(p.entry_date, per) && H.matches(p, q); });
+    var byMonth = {};
+    petty.forEach(function (p) { var m = H.ym(p.entry_date); byMonth[m] = (byMonth[m] || 0) + Number(p.amount_aed); });
+    var peak = Math.max.apply(null, [1].concat(Object.values(byMonth)));
+    if (canEdit) action = H.addButton(ctx, { table: 'petty_cash', label: 'Add entry', fields: [
+      { name: 'entry_date', label: 'Date', type: 'date', required: true, default: H.today() },
+      { name: 'description', label: 'Description', required: true },
+      { name: 'category', label: 'Category', type: 'select', required: true, options: [['petty_cash', 'Petty cash'], ['office', 'Office'], ['transport', 'Transport'], ['refreshments', 'Refreshments'], ['other', 'Other']] },
+      { name: 'amount_aed', label: 'Amount in AED', type: 'number', required: true }
+    ] });
+    body = H.row(
+      H.table({ title: 'Petty cash book', note: aed(sum(pr.map(function (r) { return r.amount_aed; }))) + ' total', rows: pr, empty: 'No petty cash recorded for ' + per.label + '.', columns: [
+        { key: 'description', label: 'Entry', render: function (r) { return H.bold(r.description); } },
+        { key: 'category', label: 'Category', render: function (r) { return H.badge(H.label(r.category)); } },
+        { key: 'entry_date', label: 'Date', render: function (r) { return H.fmtDate(r.entry_date); } },
+        { key: 'amount_aed', label: 'Amount', num: 1, render: function (r) { return aed(r.amount_aed); } }
+      ].concat(canEdit ? [{ key: 'x', label: 'Action', render: function (r) { return del('petty_cash', r); } }] : []) }),
+      H.side({ title: 'By month', items: Object.keys(byMonth).sort().reverse().map(function (m) { return { label: H.monthLabel(m), value: aed(byMonth[m]), pct: Math.round(byMonth[m] / peak * 100), wood: m === per.id }; }) }));
+  }
+
+  if (tab === 'urgent') {
+    sub = 'Outstanding and recently paid items.';
+    var ur = urgent.filter(function (x) { return H.matches(x, q); }), byType = {};
+    open.forEach(function (x) { byType[x.type] = (byType[x.type] || 0) + Number(x.amount_aed); });
+    if (canEdit) action = H.addButton(ctx, { table: 'urgent_payments', label: 'Add payment', fields: [
+      { name: 'payee', label: 'Payee', required: true },
+      { name: 'type', label: 'Type', type: 'select', required: true, options: ['supplier', 'listing_portal', 'salary', 'commission', 'office', 'utilities', 'tax'].map(function (t) { return [t, H.label(t)]; }) },
+      { name: 'amount_aed', label: 'Amount in AED', type: 'number', required: true },
+      { name: 'due_on', label: 'Due date', type: 'date' },
+      { name: 'status', label: 'Status', type: 'select', required: true, options: [['outstanding', 'Outstanding'], ['overdue', 'Overdue'], ['under_review', 'Under review'], ['paid', 'Paid']] },
+      { name: 'notes', label: 'Notes', type: 'textarea' }
+    ] });
+    body = H.row(
+      H.table({ title: 'Payments', note: ur.length + ' items', rows: ur, columns: [
+        { key: 'payee', label: 'Payee', render: function (r) { return H.cell(r.payee, r.notes); } },
+        { key: 'type', label: 'Type', render: function (r) { return H.badge(H.label(r.type)); } },
+        { key: 'due_on', label: 'Due', render: function (r) { return H.fmtDate(r.due_on); } },
+        { key: 'amount_aed', label: 'Amount', num: 1, render: function (r) { return aed(r.amount_aed); } },
+        { key: 'status', label: 'Status', render: function (r) { return H.badge(H.label(r.status), TONE[r.status]); } }
+      ].concat(canEdit ? [{ key: 'x', label: 'Action', render: function (r) { return r.status !== 'paid' ? H.rowAction(ctx, { table: 'urgent_payments', id: r.id, patch: { status: 'paid' }, label: 'Mark paid' }) : null; } }] : []) }),
+      H.side({ title: 'Outstanding by type', note: aed(outstanding), items: Object.entries(byType).sort(function (a, b) { return b[1] - a[1]; }).map(function (e) { return { label: H.label(e[0]), value: aed(e[1]), pct: outstanding ? Math.round(e[1] / outstanding * 100) : 0 }; }) }));
+  }
+
+  if (tab === 'budget') {
+    sub = 'Yearly budget plan.';
+    var total = sum(budget.map(function (b) { return b.annual_aed; })), spent = tot(all, 'out');
+    if (canEdit) action = H.addButton(ctx, { table: 'budget_lines', label: 'Add budget line', fields: [
+      { name: 'year', label: 'Year', type: 'number', required: true, default: new Date().getFullYear() },
+      { name: 'line', label: 'Budget line', required: true },
+      { name: 'annual_aed', label: 'Annual amount in AED', type: 'number', required: true }
+    ] });
+    var bRows = budget.map(function (b) { return Object.assign({}, b, { share: total ? Math.round(b.annual_aed / total * 100) + '%' : '–' }); })
+      .concat(budget.length ? [{ line: 'Total', annual_aed: total, share: '100%', __total: true }] : []);
+    body = H.row(
+      H.table({ title: 'Budget lines', rows: bRows, empty: 'No budget lines yet.', columns: [
+        { key: 'line', label: 'Line' },
+        { key: 'annual_aed', label: 'Annual amount', num: 1, render: function (r) { return aed(r.annual_aed); } },
+        { key: 'share', label: 'Share', num: 1 }
+      ] }),
+      H.side({ title: 'Budget against actual', items: [
+        { label: 'Annual budget', value: aed(total) },
+        { label: 'Monthly equivalent', value: aed(Math.round(total / 12)) },
+        { label: 'Spent to date', value: aed(spent), pct: total ? Math.round(spent / total * 100) : 0 }
+      ] }));
+  }
+
+  return [
+    H.pageHead(ctx, { eyebrow: 'Finance', title: 'Finance', sub: sub, keep: { tab: tab }, action: action, search: tab === 'petty' || tab === 'urgent' }),
+    H.tabs(ctx, TABS, tab, 'finance.html'),
+    H.kpis([
+      { label: 'Money in', value: aed(incP), note: per.label },
+      { label: 'Money out', value: aed(expP), note: per.label },
+      { label: 'Net', value: aed(incP - expP), note: incP - expP < 0 ? 'More out than in' : 'More in than out', tone: incP - expP < 0 ? 'down' : 'up' },
+      { label: 'Urgent payments', value: aed(outstanding), note: open.length + ' items outstanding', tone: outstanding ? 'down' : '' }
+    ]),
+    body
+  ];
+});
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
+</body>
+</html>

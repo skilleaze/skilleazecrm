@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard · Stratt HQ</title>
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#12253D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Stratt HQ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/app.js"></script>
+</head>
+<body>
+<div id="app"></div>
+<script>
+HQ.boot('dashboard', async function (ctx) {
+  var H = HQ, h = H.h, sb = ctx.sb, per = ctx.per, sum = H.sum, aed = H.aed;
+  var res = await Promise.all([
+    sb.from('transactions').select('month, direction, category, amount_aed').order('month'),
+    sb.from('deals').select('id, name, developer, commission_aed, received_on, status').eq('status', 'received').order('received_on', { ascending: false }),
+    sb.from('urgent_payments').select('type, amount_aed, status').neq('status', 'paid')
+  ]);
+  var all = res[0].data || [], deals = res[1].data || [], u = res[2].data || [];
+  var pt = all.filter(function (r) { return H.within(r.month, per); });
+  var tot = function (rows, dir) { return sum(rows.filter(function (r) { return r.direction === dir; }).map(function (r) { return r.amount_aed; })); };
+  var inc = tot(pt, 'in'), exp = tot(pt, 'out'), net = inc - exp;
+  var sal = sum(pt.filter(function (r) { return r.category === 'salaries'; }).map(function (r) { return r.amount_aed; }));
+  var months = Array.from(new Set(all.map(function (r) { return H.ym(r.month); }))).sort();
+  var byM = function (dir) { return months.map(function (m) { return tot(all.filter(function (r) { return H.ym(r.month) === m; }), dir); }); };
+  var cats = Object.keys(H.CATEGORY_LABELS).filter(function (c) { return c !== 'commission'; }).map(function (c, i) {
+    return { label: H.CATEGORY_LABELS[c], value: sum(pt.filter(function (r) { return r.direction === 'out' && r.category === c; }).map(function (r) { return r.amount_aed; })), color: H.COLOURS[i] };
+  }).filter(function (c) { return c.value > 0; });
+  var recv = deals.filter(function (d) { return H.within(d.received_on, per) && H.matches(d, ctx.q); });
+  var amt = function (f) { return sum(u.filter(f).map(function (x) { return x.amount_aed; })); };
+  var first = ((ctx.profile && ctx.profile.full_name) || '').split(' ')[0];
+  var hour = parseInt(new Date().toLocaleString('en-GB', { timeZone: 'Asia/Dubai', hour: '2-digit', hour12: false }), 10);
+  var greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  return [
+    H.pageHead(ctx, { eyebrow: 'Executive overview', title: greet + (first ? ', ' + first : ''), sub: 'Income, expenses and commission across Stratt Signature.' }),
+    H.kpis([
+      { label: 'Income', value: aed(inc), note: recv.length + (recv.length === 1 ? ' commission payment' : ' commission payments') },
+      { label: 'Expenses', value: aed(exp), note: per.label },
+      { label: 'Net result', value: aed(net), note: net < 0 ? 'Loss for the period' : 'Profit for the period', tone: net < 0 ? 'down' : 'up' },
+      { label: 'Salaries', value: aed(sal), note: exp ? Math.round(sal / exp * 100) + '% of expenses' : 'No expenses recorded' }
+    ]),
+    h('div', { class: 'row' },
+      h('section', { class: 'hero grow' },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' } },
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: '10px' } },
+            h('div', { class: 'h', style: { fontSize: '13px', fontWeight: 500, color: '#BEBEBE' } }, 'Net result, ' + per.label),
+            h('div', { class: 'big' }, aed(net))),
+          h('div', { class: 'legend' }, h('span', null, h('i', { style: { background: '#C9A77C' } }), 'Income'), h('span', null, h('i', { style: { background: '#BEBEBE' } }), 'Expenses'))),
+        months.length ? H.lineChart([{ name: 'Income', values: byM('in'), color: '#C9A77C' }, { name: 'Expenses', values: byM('out'), color: '#BEBEBE', dash: '6 6' }], months.map(H.shortMonth)) : h('div', { style: { color: '#BEBEBE' } }, 'No transactions yet.')),
+      h('section', { class: 'card side donut-card' },
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '12px' } }, h('h2', { style: { margin: 0, fontSize: '18px' } }, 'Expenses by category'), h('span', { class: 'muted' }, per.label)),
+        H.donut(cats, H.aedShort(exp), 'expenses'))),
+    H.row(
+      H.table({ title: 'Commission received', note: recv.length + ' payments', rows: recv, empty: 'No commission received in ' + per.label + '.', columns: [
+        { key: 'name', label: 'Deal', render: function (r) { return H.cell(r.name, r.developer); } },
+        { key: 'received_on', label: 'Received', render: function (r) { return H.fmtDate(r.received_on); } },
+        { key: 'commission_aed', label: 'Commission', num: 1, render: function (r) { return aed(r.commission_aed); } }
+      ] }),
+      H.side({ title: 'Urgent payments', items: [
+        { label: 'Overdue', value: aed(amt(function (x) { return x.status === 'overdue'; })), tone: 'down' },
+        { label: 'Salaries owed', value: aed(amt(function (x) { return x.type === 'salary'; })) },
+        { label: 'Commission claims under review', value: aed(amt(function (x) { return x.status === 'under_review'; })) },
+        { label: 'Total outstanding', value: aed(amt(function () { return true; })), sub: u.length + ' items' }
+      ] }))
+  ];
+});
+</script>
+<script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
+</body>
+</html>
