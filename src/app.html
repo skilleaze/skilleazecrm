@@ -6628,7 +6628,7 @@ class AppCore extends PayFromMix {
       const num2 = (k, label, ph, hint) => ({ key: k, label, isInput: true, inputType: 'number', value: f[k] ?? '', placeholder: ph, onChange: e => set(k, e.target.value), hasHint: !!hint, hint: hint || '', cap: 'none', corr: 'off', spell: false, ac: 'off' });
       const fs = [
         { key: 'skzCountry', label: 'Customer paid from', isSelect: true, value: f.skzCountry || '', onChange: e => this.setState(s => ({ form: { ...s.form, skzCountry: e.target.value, skzPay: '', skzTax: '', skzFee: '' } })), options: [{ value: '', label: 'Choose country…' }, ...SKZ_C.map(x => ({ value: x[0], label: x[1] + ' · ' + x[2] }))] },
-        ...(C ? [num2('skzLocal', 'Customer paid (' + C[2] + ')', 'e.g. 751.32', 'The amount on the Dodo payment (e.g. SAR 26.94).'),
+        ...(C ? [num2('skzLocal', 'Customer paid (' + C[2] + ')', 'e.g. 751.32', 'The amount on the Dodo payment (e.g. SAR 26.94).' + ((t === 'order' ? f.pay : f.payType) === 'PARTIAL' ? ' For a partial payment, enter only what was paid so far.' : '')),
           
           { key: 'skzBrk', label: 'Deductions', isInfo: true, info: B.done ? 'Tax ₹' + Math.round(B.tax * USD_AED * AED_RATE).toLocaleString('en-IN') + '  ·  Dodo fees ₹' + Math.round((B.fee + Math.max(0, B.local / (B.fx || 1) - B.pay)) * USD_AED * AED_RATE).toLocaleString('en-IN') : (B.loading && B.local > 0 ? 'Loading today\'s exchange rate…' : 'Enter what the customer paid.') },
           { key: 'skzNet', label: 'We receive', isInfo: true, info: B.done ? '₹' + B.inr.toLocaleString('en-IN') : '–' }] : [])];
@@ -6636,7 +6636,10 @@ class AppCore extends PayFromMix {
       const HIDE = new Set(['price', 'disc', 'topup', 'final', 'aed', 'priceAed', 'paidAed', 'usd', 'paidUsd']); v.fields = v.fields.filter(x => !HIDE.has(x.key)); }
     return v; }
   submitDialog() { const { dialog: t, form: f } = this.state || {};
-    if ((t === 'order' || t === 'pOrder') && f && f.via === 'gwuae') { const B = skzCalc(f); if (!B.c) return this.setState({ err: 'Choose the country the customer paid from.' }); if (!(+f.skzLocal > 0)) return this.setState({ err: 'Enter exactly what the customer was charged on Dodo.' }); if (!B.done) return this.setState({ err: B.loading ? 'Exchange rate is still loading. Try again in a moment.' : 'Enter what the customer paid.' }); if (!(B.net > 0)) return this.setState({ err: 'Net amount must be above zero. Check tax and fees.' }); this._skzNet = { usd: B.net, aed: B.aed, inr: B.inr, brk: { country: B.c[0], cur: B.c[2], local: B.local, platLocal: +B.platLocal.toFixed(2), payUsd: B.pay, taxUsd: B.tax, feeUsd: B.fee, netUsd: B.net, netAed: B.aed, netInr: B.inr } }; setTimeout(() => { this._skzNet = null; }, 2500); }
+    if ((t === 'order' || t === 'pOrder') && f && f.via === 'gwuae') { const B = skzCalc(f); if (!B.c) return this.setState({ err: 'Choose the country the customer paid from.' }); if (!(+f.skzLocal > 0)) return this.setState({ err: 'Enter exactly what the customer was charged on Dodo.' }); if (!B.done) return this.setState({ err: B.loading ? 'Exchange rate is still loading. Try again in a moment.' : 'Enter what the customer paid.' }); if (!(B.net > 0)) return this.setState({ err: 'Net amount must be above zero. Check tax and fees.' }); this._skzNet = { usd: B.net, aed: B.aed, inr: B.inr, brk: { country: B.c[0], cur: B.c[2], local: B.local, platLocal: +B.platLocal.toFixed(2), payUsd: B.pay, taxUsd: B.tax, feeUsd: B.fee, netUsd: B.net, netAed: B.aed, netInr: B.inr } }; setTimeout(() => { this._skzNet = null; }, 2500); 
+      const part = t === 'order' ? f.pay === 'PARTIAL' : f.payType === 'PARTIAL';
+      if (part) { const gAed = Math.round((B.local / (B.fx || 1)) * USD_AED * 100) / 100, P = pxCalc(f, 'AED'), full = (+P.fin || 0) > 0 && gAed >= P.fin - 0.01;
+        this.state = { ...this.state, form: { ...f, paidAed: full ? '' : String(gAed), ...(full ? (t === 'order' ? { pay: 'PAID' } : { payType: 'FULL' }) : {}) } }; } }
     return super.submitDialog(); }
   setData(fn) { const net = this._skzNet; if (!net || typeof fn !== 'function') return super.setData(fn);
     return super.setData(d0 => { const d1 = fn(d0); if (!d0 || !d1 || d1.orders === d0.orders) return d1;
@@ -6649,7 +6652,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795437453086';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795443009557';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data); this.livePush(); return; } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
       this._verT = setInterval(chk, 120000); setTimeout(chk, 15000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chk(); }); }
     this._authX = () => { if (!this.state.user) return; try { localStorage.removeItem(SESSION); } catch (e) {} this.setState({ user: null, liveProfile: null, loginErr: 'Your sign-in expired. Please sign in again.' }); };
