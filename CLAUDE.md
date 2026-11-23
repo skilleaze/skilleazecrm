@@ -80,6 +80,7 @@ Private keys (VAPID private key, service role key, DB password) are **not** in t
   - ₹500 per interview-training hour.
   - CV Modification pays ₹0.
   - Payroll and Leaderboard use the same rule.
+  - Combined orders (owner decision, 23 Nov 2026): each expert is paid when THEIR part is closed (`taskView(o, T)`), even if another service on the order is still open. Dashboard "My points", payslip (`hrPay`) and the Experts & payroll table all use this.
 - **Ad spend:**
   - Indian account: ₹ + 18% GST.
   - UAE account: AED × ₹29.40.

@@ -4324,7 +4324,7 @@ class Core extends Base {
     }
     if (s.view === 'experts') {
       const lt = role === 'ops' ? ws : (s.lbType || 'cv');
-      const rows = EXPERTS.filter(e => typeOf(e) === lt || didType(e, lt, s.data.orders)).map(e => { const t = lt, os = s.data.orders.filter(o => getExpert(o, t) === e), cm = os.filter(o => o.status === 'CLOSED' && o.pay !== 'REFUNDED' && !o.summary && inPts(o) && pointsFor(o, t) > 0), tt = cm.filter(o => o.closeAt && o.closeAt >= o.payAt).map(o => (o.closeAt - o.payAt) / 864e5);
+      const rows = EXPERTS.filter(e => typeOf(e) === lt || didType(e, lt, s.data.orders)).map(e => { const t = lt, os = s.data.orders.filter(o => getExpert(o, t) === e), cm = os.filter(o => taskView(o, t).status === 'CLOSED' && o.pay !== 'REFUNDED' && !o.summary && inPts(taskView(o, t)) && pointsFor(o, t) > 0), tt = cm.map(o => taskView(o, t)).filter(o => o.closeAt && o.closeAt >= o.payAt).map(o => (o.closeAt - o.payAt) / 864e5);
         return { e, closedN: cm.length, pts: cm.reduce((x, o) => x + pointsFor(o, t), 0), open: num(os.filter(o => o.status !== 'CLOSED' && o.pay !== 'REFUNDED').length), pend: num(os.filter(o => isStart(o)).length), tat: dur(tt.length ? tt.reduce((x, y) => x + y, 0) / tt.length : null) }; })
         .sort((x, y) => y.pts - x.pts || y.closedN - x.closedN);
       Object.assign(v, { title: 'Expert leaderboard', isExpertsPage: true, isAssignDesk: false, isOpsOverview: false, isMgmtOverview: false, showBoard: false, showOrders: false, hasKpis: false, hasPrimary: false, showTopPrimary: false, showMonth: true,
@@ -4341,7 +4341,8 @@ class Core extends Base {
       const staffOn = Object.keys(STAFF).filter(k => pm >= STAFF[k].from);
       const others = Object.keys(paidMap).filter(k => !EXPERTS.includes(k) && !staffOn.includes(k));
       const rows = [...(lt === 'all' ? staffOn : []), ...EXPERTS.filter(e => lt === 'all' || typeOf(e) === lt || didType(e, lt, s.data.orders)), ...(lt === 'all' ? others : [])].map(e => { const st = staffOn.includes(e) ? STAFF[e] : null, isEx = !st && EXPERTS.includes(e), t = isEx ? typeOf(e) : null; const cm = isEx ? s.data.orders.filter(o => ALL_T.some(T => getExpert(o, T) === e) && o.status === 'CLOSED' && o.pay !== 'REFUNDED' && !o.summary && String(o.date || '').slice(0, 7) === pm) : [];
-        const rec = paidMap[e] || {}, pts = cm.reduce((x, o) => x + ALL_T.reduce((y, T) => y + (getExpert(o, T) === e ? pointsFor(o, T) : 0), 0), 0), extras = rec.extras || [], ex = extras.reduce((x, y) => x + y.amount, 0), fixed = st ? st.pay : pts, basePay = rec.override ?? fixed;
+        // Same rule as the expert's "My points": a service counts when THAT expert's part is closed (combined orders included).
+        const rec = paidMap[e] || {}, pts = cm.reduce((x, o) => x + ALL_T.reduce((y, T) => y + (getExpert(o, T) === e && taskView(o, T).status === 'CLOSED' ? pointsFor(o, T) : 0), 0), 0), extras = rec.extras || [], ex = extras.reduce((x, y) => x + y.amount, 0), fixed = st ? st.pay : pts, basePay = rec.override ?? fixed;
         return { e, t, st, n: cm.filter(o => ALL_T.some(T => getExpert(o, T) === e && pointsFor(o, T) > 0)).length, pts, fixed, rec, extras, ex, basePay, sal: basePay + ex, paid: !!rec.paidAt }; }).filter(x => x.st || x.n > 0 || x.rec.override != null || x.extras.length).sort((a, b) => b.sal - a.sal);
       const total = rows.reduce((x, r) => x + r.sal, 0), paidTot = rows.filter(r => r.paid).reduce((x, r) => x + r.sal, 0);
       const upd = (e, fn) => this.setData(dd => { const pr = { ...(dd.payroll || {}) }, mm = { ...(pr[pm] || {}) }; const rec = fn({ ...(mm[e] || {}) }); if (Object.keys(rec).length) mm[e] = rec; else delete mm[e]; pr[pm] = mm; return { ...dd, payroll: pr }; });
@@ -5290,8 +5291,10 @@ class HRMix extends Core2 {
 
   hrPay(p, ym) { const d = this.state.data, earn = [], ded = [];
     const pk = p.role === 'expert' ? p.id : p.role === 'ops' ? String(p.id).toUpperCase() : p.id, rec = ((d.payroll || {})[ym] || {})[pk] || {};
-    if (p.role === 'expert') { const cm = d.orders.filter(o => ALL_T.some(T => getExpert(o, T) === p.id) && o.status === 'CLOSED' && o.pay !== 'REFUNDED' && o.closeAt && ptsDay(o).slice(0, 7) === ym);
-      const pts = cm.reduce((x, o) => x + ALL_T.reduce((y, T) => y + (getExpert(o, T) === p.id ? pointsFor(o, T) : 0), 0), 0); earn.push([rec.override != null ? 'Salary (set by HR)' : 'Points pay · ' + cm.length + ' closed works · ' + num(pts) + ' points', rec.override ?? pts]); }
+    if (p.role === 'expert') { // same rule as "My points": each service counts when this expert's part of it is closed
+      const doneT = (o, T) => { if (getExpert(o, T) !== p.id) return false; const v = taskView(o, T); return v.status === 'CLOSED' && !!v.closeAt && ptsDay(v).slice(0, 7) === ym; };
+      const cm = d.orders.filter(o => !o.summary && o.pay !== 'REFUNDED' && ALL_T.some(T => doneT(o, T)));
+      const pts = cm.reduce((x, o) => x + ALL_T.reduce((y, T) => y + (doneT(o, T) ? pointsFor(o, T) : 0), 0), 0); earn.push([rec.override != null ? 'Salary (set by HR)' : 'Points pay · ' + cm.length + ' closed works · ' + num(pts) + ' points', rec.override ?? pts]); }
     else if (p.role === 'ops') { const fx = { ISHFA: 20000, DHIYA: 10000 }[pk] || 0; if (ym >= '2026-10' && fx) earn.push(['Fixed salary', rec.override ?? fx]); }
     else { const M = this.putMonth(ym, d); if (p.role === 'manager') { earn.push(['Fixed salary', M.mgrBase]); if (M.mgrBonus) earn.push(['10% of office profit', M.mgrBonus]); } else { const b = M.bdes.find(x => x.st.id === p.id); if (b) { earn.push(['Fixed salary', b.base]); if (b.bonus) earn.push(['Bonus · 10% above ' + inr(b.st.target || 100000), b.bonus]); } } }
     (rec.extras || []).forEach(x => (x.amount < 0 ? ded : earn).push([x.label || 'Extra', Math.abs(x.amount)]));
@@ -6646,7 +6649,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795429356196';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795437453086';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data); this.livePush(); return; } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
       this._verT = setInterval(chk, 120000); setTimeout(chk, 15000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chk(); }); }
     this._authX = () => { if (!this.state.user) return; try { localStorage.removeItem(SESSION); } catch (e) {} this.setState({ user: null, liveProfile: null, loginErr: 'Your sign-in expired. Please sign in again.' }); };
