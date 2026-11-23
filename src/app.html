@@ -3514,12 +3514,15 @@ class Base extends DCLogic {
         const myAgents = ((d.expertAgents || this._defMap || {})[u.id] || []);
         let HID = []; try { HID = JSON.parse(localStorage.getItem('skz-hide:' + u.id) || '[]'); } catch (e) {} const hidS = new Set(HID);
         const hideIt = o => { const n = [...new Set([...HID, o.id])].slice(-500); try { localStorage.setItem('skz-hide:' + u.id, JSON.stringify(n)); } catch (e) {} this.toast(o.name + ' hidden from your new works'); this.forceUpdate(); };
-        const pool = d.orders.filter(o => !o.expert && !hidS.has(o.id) && isStart(o) && !(o.tst && Object.values(o.tst).some(x => x === 'CLOSED')) && !o.closeAt && myAgents.includes(ownKey(o)) && String(o.date || '') >= '2026-11-01' && (SK.length < 2 ? fitsType(u.id, o) : orderTypes(o).includes(WT) && (WT !== 'cv' || cvOk(u.id, o)))).sort((a, b) => isUrgent(b) - isUrgent(a) || a.payAt - b.payAt);
+        // Open work = a service of this order that I can do, that nobody holds yet and that has not started.
+        // Per service, so the LinkedIn part of a CV + LinkedIn order shows even when the CV part is taken or closed.
+        const poolT = o => (SK.length < 2 ? orderTypes(o).filter(t => skillsOf(u.id).includes(t) && (t !== 'cv' || cvOk(u.id, o))) : orderTypes(o).includes(WT) && (WT !== 'cv' || cvOk(u.id, o)) ? [WT] : []).find(t => !getExpert(o, t) && taskSt(o, t) === 'PENDING') || '';
+        const pool = d.orders.filter(o => !hidS.has(o.id) && o.status !== 'CLOSED' && o.pay !== 'REFUNDED' && myAgents.includes(ownKey(o)) && String(o.date || '') >= '2026-11-01' && !!poolT(o) && (taskTypes(o).length > 1 || (isStart(o) && !o.closeAt))).sort((a, b) => isUrgent(b) - isUrgent(a) || a.payAt - b.payAt);
         const monthMine = mine.filter(inM), t = tatOf(monthMine);
         Object.assign(V, {
           title: 'My queue', isQueue: true, hasKpis: true, kicker: skillsOf(u.id).map(k => SKILL_LABEL[k]).join(' + ') + ' expert · ' + tc(u.id) + ' · ' + (!myAgents.length ? 'No agents yet, ask operations' : myAgents.length >= AG.length ? 'All agents' : myAgents.length > 3 ? myAgents.length + ' agents' : myAgents.map(agentLabel).join(', ')),
           kpis: [k(SL('PENDING'), num(pend.length), mine.filter(o => isUrgent(o) && o.status !== 'CLOSED').length + ' urgent', pend.length ? 'var(--color-accent-700)' : 'inherit'), k('With customer', num(draft.length + sub.length + rev.length), rev.length + ' revisions'), k('Closed · ' + RG.label, num(closedToday.length), 'orders you completed'), k('Avg TAT', t.close, 'payment → closed · ' + RG.label)],
-          pool: { has: pool.length > 0, count: pool.length, items: pool.slice(0, 6).map(o => ({ ...card(o, []), claim: () => this.claimPool(o, myAgents, SK.length < 2 ? (orderTypes(o).find(t => skillsOf(u.id).includes(t)) || 'cv') : WT), hide: () => hideIt(o) })),
+          pool: { has: pool.length > 0, count: pool.length, items: pool.slice(0, 6).map(o => ({ ...card(o, []), claim: () => this.claimPool(o, myAgents, poolT(o) || 'cv'), hide: () => hideIt(o) })),
             taken: (() => { const td = iso(new Date()); const tk = d.orders.filter(o => !o.summary && o.date === td && myAgents.includes(ownKey(o)) && (SK.length < 2 ? fitsType(u.id, o) : orderTypes(o).includes(WT))).map(o => { const T = SK.length < 2 ? (orderTypes(o).find(t => skillsOf(u.id).includes(t)) || 'cv') : WT, who = getExpert(o, T); return who && who !== u.id ? { name: o.name || 'Customer', by: 'Assigned to: ' + tc(who), agent: agentLabel(ownKey(o)), svc: (o.services || []).map(x => SVC_NICE[x] || tc(x)).join(' + ') } : null; }).filter(Boolean); return { has: tk.length > 0, items: tk.slice(0, 12), count: tk.length }; })() },
           columns: [
             col(SL('PENDING'), CUR_T === 'interview' ? 'Book a session with the customer' : 'Urgent first, then newest', pend, o => card(o, [A(shareLbl(o), () => this.setSt(o, { status: 'DRAFT SHARED' }, tyO(o), SL('DRAFT SHARED', tyO(o)) + ': ' + o.name), true), A(SL('CV SUBMITTED', tyO(o)), () => this.setSt(o, { status: 'CV SUBMITTED', submitAt: Date.now() }, tyO(o), SL('CV SUBMITTED', tyO(o)) + ': ' + o.name)), A('Close · not mine', () => this.ask('Give ' + o.name + ' back? It leaves your queue and goes back to ' + agentLabel(o.agent) + ' and operations to assign to the right expert.', () => { const T = tyO(o), wx = { ...(o.wx || {}) }; if (wx[T] !== undefined) wx[T] = ''; this.updOrder(o.id, { expert: '', wx }, o.name + ' given back to operations'); }, 'Give back', true))])),
@@ -4679,7 +4682,12 @@ class Core2 extends Core {
     try { if (L && L.on && L.on() && L.sb) { const { data, error } = await L.sb().rpc('claim_order', { p_id: o.id, p_type: T || 'cv' });
         if (error) { if (!/claim_order/.test(error.message || '')) return this.toast('Not picked: ' + (error.message || 'try again')); }
         else if (data && data !== u.id) { this.setData(dd => ({ ...dd, orders: dd.orders.map(x => x.id !== o.id ? x : { ...x, ...(T === 'cv' || !T ? { expert: data } : {}), wx: { ...(x.wx || {}), [T || 'cv']: data } }) })); return this.toast('Already taken by ' + tc(data)); } }
-      this.updOrder(o.id, { expert: u.id, wx: { ...(o.wx || {}), [T || 'cv']: u.id } }, o.name + ' assigned to you'); } finally { this._claiming = false; } }
+      // Keep the other services' experts: `expert` is the CV expert, so only a CV pick (or a one-service order) changes it.
+      { const full = (this.state.data.orders || []).find(q => q.id === o.id) || o, T0 = T || 'cv', wx = { ...(full.wx || {}) };
+        if (T0 !== 'cv' && full.expert && wx.cv === undefined && getExpert(full, 'cv')) wx.cv = getExpert(full, 'cv');
+        wx[T0] = u.id; const p = { wx }; if (T0 === 'cv' || orderTypes(full).length < 2 || !full.expert) p.expert = T0 === 'cv' || orderTypes(full).length < 2 ? u.id : (wx.cv || '');
+        if (p.expert === '') delete p.expert;
+        this.updOrder(o.id, p, o.name + ' · ' + String(TYPE_NAME[T0] || T0).replace(/ (expert|trainer)$/i, '') + ' assigned to you'); } } finally { this._claiming = false; } }
   // Expert work status (Share draft / Submit / Revision / Close). Saved on the server in one locked step
   // (set_task_status): success is shown only after the database confirms, failures say why and change nothing.
   async setSt(o, patch, T, msg) { const L = window.SKZLive, live = LIVE_MODE && L && L.setTaskStatus && L.on && L.on();
@@ -6638,7 +6646,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795423309191';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795424570579';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data); this.livePush(); return; } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
       this._verT = setInterval(chk, 120000); setTimeout(chk, 15000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chk(); }); }
     this._authX = () => { if (!this.state.user) return; try { localStorage.removeItem(SESSION); } catch (e) {} this.setState({ user: null, liveProfile: null, loginErr: 'Your sign-in expired. Please sign in again.' }); };

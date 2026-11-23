@@ -1,4 +1,7 @@
 (function(){ if (window.__skzDemo) return; window.__skzDemo=1;
+ // Preview never talks to the live database.
+ function cut(){ try { if (window.SKZLive) { window.SKZLive.on = function(){ return false; }; window.SKZLive.sb = function(){ throw new Error('Preview: not connected'); }; } } catch(e){} }
+ cut(); setInterval(cut, 300);
  try{localStorage.setItem('skz-alerts-nudge',String(Date.now()+864e9));}catch(e){}
  var R=[['muneez','Management'],['dhiya','Head of ops'],['ishfa','Ops manager'],['alpha','Sales agent'],['shafeeda','CV expert'],['akshara','LinkedIn expert'],['muhammed.munavvir','Puttur manager']];
  function btn(t){return [...document.querySelectorAll('button')].find(b=>b.innerText.trim()===t);}
