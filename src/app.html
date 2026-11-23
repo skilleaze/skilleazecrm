@@ -3131,7 +3131,7 @@ class Base extends DCLogic {
         const den = errs.denied, bad = new Set(den.map(x => x.k + '|' + x.id)), keys = [...new Set(den.map(x => x.k))];
         const heal = d => { const o = { ...d }; keys.forEach(k => { const was = new Map(((prev && prev[k]) || []).map(r => [r.id, r])); o[k] = (d[k] || []).filter(r => !bad.has(k + '|' + r.id) || was.has(r.id)).map(r => bad.has(k + '|' + r.id) ? was.get(r.id) : r); }); return o; };
         const nm = (den.find(x => x.k === 'orders' && (next.orders || []).some(r => r.id === x.id)) || den[0]), rec = ((next[nm.k] || []).find(r => r.id === nm.id) || {});
-        this.setState(s => ({ liveSaving: false, data: heal(s.data) }), () => { this.outboxSave(prev, this.state.data); this.setState({ liveUnsaved: this.outboxCount() }); this.liveCache(); clearTimeout(this._retryT); this._retryT = setTimeout(() => this.livePush(), 1500); });
+        this.setState(s => ({ liveSaving: false, data: heal(s.data) }), () => { this.outboxSave(prev, this.state.data); this.outboxDrop(den); this.setState({ liveUnsaved: this.outboxCount() }); this.liveCache(); clearTimeout(this._retryT); this._retryT = setTimeout(() => this.livePush(), 1500); });
         this.toast('Not allowed for your login: ' + den.length + ' change' + (den.length > 1 ? 's' : '') + (rec.name ? ' (e.g. ' + rec.name + ')' : '') + ' — showing the saved version again. Ask operations if it should change.'); }
       else { this._pushFails = (this._pushFails || 0) + 1; this.outboxSave(prev, next); this.liveCache(); const n = this.outboxCount(); this.setState({ liveSaving: false, liveUnsaved: n });
         const net = errs.some(e => /fetch|network|offline|load failed/i.test(e)); if (this._pushFails === 1 || this._pushFails % 5 === 0) this.toast((net ? 'No internet. ' : 'Not saved yet (' + String(errs[0]).slice(0, 80) + '). ') + 'Kept safely on this device and retrying automatically.');
@@ -3161,6 +3161,8 @@ class Base extends DCLogic {
   outboxSave(prev, next) { const k = this.outboxKey(); if (!k || !next) return; const box = this.outboxRead();
     ['orders', 'transfers', 'ads', 'hr'].forEach(t => { const P = new Map(((prev && prev[t]) || []).map(x => [x.id, x])); box[t] = box[t] || {}; (next[t] || []).forEach(x => { if (x && x.id && P.get(x.id) !== x) box[t][x.id] = x; }); });
     try { localStorage.setItem(k, JSON.stringify(box)); } catch (e) {} }
+  outboxDrop(list) { const k = this.outboxKey(); if (!k || !list || !list.length) return; const box = this.outboxRead(), map = { orders: 'orders', transfers: 'transfers', ads: 'ads', hr: 'hr' };
+    list.forEach(x => { const t = map[x.k]; if (t && box[t]) delete box[t][x.id]; }); try { localStorage.setItem(k, JSON.stringify(box)); } catch (e) {} }
   outboxClear() { const k = this.outboxKey(); if (k) try { localStorage.removeItem(k); } catch (e) {} }
   outboxRestore() { const box = this.outboxRead(), d = this.state.data; if (!d) return; let n = 0; const nd = { ...d };
     ['orders', 'transfers', 'ads', 'hr'].forEach(t => { const pend = Object.values(box[t] || {}).filter(x => !(t === 'orders' && x && x.id && (window.__skzDel || new Set()).has(x.id))); if (!pend.length) return; const m = new Map((d[t] || []).map(x => [x.id, x])); pend.forEach(x => { m.set(x.id, { ...(m.get(x.id) || {}), ...x }); n++; }); nd[t] = [...m.values()]; });
@@ -3531,7 +3533,7 @@ class Base extends DCLogic {
           pool: { has: pool.length > 0, count: pool.length, items: pool.slice(0, 6).map(o => ({ ...card(o, []), claim: () => this.claimPool(o, myAgents, poolT(o) || 'cv'), hide: () => hideIt(o) })),
             taken: (() => { const td = iso(new Date()); const tk = d.orders.filter(o => !o.summary && o.date === td && myAgents.includes(ownKey(o)) && (SK.length < 2 ? fitsType(u.id, o) : orderTypes(o).includes(WT))).map(o => { const T = SK.length < 2 ? (orderTypes(o).find(t => skillsOf(u.id).includes(t)) || 'cv') : WT, who = getExpert(o, T); return who && who !== u.id ? { name: o.name || 'Customer', by: 'Assigned to: ' + tc(who), agent: agentLabel(ownKey(o)), svc: (o.services || []).map(x => SVC_NICE[x] || tc(x)).join(' + ') } : null; }).filter(Boolean); return { has: tk.length > 0, items: tk.slice(0, 12), count: tk.length }; })() },
           columns: [
-            col(SL('PENDING'), CUR_T === 'interview' ? 'Book a session with the customer' : 'Urgent first, then newest', pend, o => card(o, [A(shareLbl(o), () => this.setSt(o, { status: 'DRAFT SHARED' }, tyO(o), SL('DRAFT SHARED', tyO(o)) + ': ' + o.name), true), A(SL('CV SUBMITTED', tyO(o)), () => this.setSt(o, { status: 'CV SUBMITTED', submitAt: Date.now() }, tyO(o), SL('CV SUBMITTED', tyO(o)) + ': ' + o.name)), A('Close · not mine', () => this.ask('Give ' + o.name + ' back? It leaves your queue and goes back to ' + agentLabel(o.agent) + ' and operations to assign to the right expert.', () => { const T = tyO(o), wx = { ...(o.wx || {}) }; if (wx[T] !== undefined) wx[T] = ''; this.updOrder(o.id, { expert: '', wx }, o.name + ' given back to operations'); }, 'Give back', true))])),
+            col(SL('PENDING'), CUR_T === 'interview' ? 'Book a session with the customer' : 'Urgent first, then newest', pend, o => card(o, [A(shareLbl(o), () => this.setSt(o, { status: 'DRAFT SHARED' }, tyO(o), SL('DRAFT SHARED', tyO(o)) + ': ' + o.name), true), A(SL('CV SUBMITTED', tyO(o)), () => this.setSt(o, { status: 'CV SUBMITTED', submitAt: Date.now() }, tyO(o), SL('CV SUBMITTED', tyO(o)) + ': ' + o.name)), A('Close · not mine', () => this.ask('Give ' + o.name + ' back? It leaves your queue and goes back to ' + agentLabel(o.agent) + ' and operations to assign to the right expert.', () => { const T = tyO(o), wx = { ...(o.wx || {}) }, me = String((this.state.user || {}).id || '').trim().toUpperCase(); if (wx[T] !== undefined) wx[T] = ''; const gb = { wx }; if (String(o.expert || '').trim().toUpperCase() === me) gb.expert = ''; this.updOrder(o.id, gb, o.name + ' given back to operations'); }, 'Give back', true))])),
             col(SL('DRAFT SHARED'), CUR_T === 'interview' ? 'Session booked with the customer' : 'Waiting for customer feedback', draft, o => card(o, [A(SL('CV SUBMITTED', tyO(o)), () => this.setSt(o, { status: 'CV SUBMITTED', submitAt: Date.now() }, tyO(o), SL('CV SUBMITTED', tyO(o)) + ': ' + o.name), true), A(tyO(o) === 'interview' ? 'Follow-up' : 'Revision', () => this.setSt(o, { status: 'REVISION' }, tyO(o), SL('REVISION', tyO(o))))])),
             col(SL('CV SUBMITTED'), CUR_T === 'interview' ? 'Close once the customer is done' : 'Waiting for customer approval', sub, o => card(o, [A('Close', () => this.setSt(o, { status: 'CLOSED', closeAt: Date.now(), submitAt: o.submitAt || Date.now() }, tyO(o), 'Closed: ' + o.name), true), A(tyO(o) === 'interview' ? 'Follow-up' : 'Revision', () => this.setSt(o, { status: 'REVISION' }, tyO(o), SL('REVISION', tyO(o))))])),
             col(SL('REVISION'), CUR_T === 'interview' ? 'Customer needs another session' : 'Customer asked for changes', rev, o => card(o, [A('Resubmit', () => this.setSt(o, { status: 'CV SUBMITTED', submitAt: o.submitAt || Date.now() }, tyO(o), 'Resubmitted'), true), A('Close', () => this.setSt(o, { status: 'CLOSED', closeAt: Date.now(), submitAt: o.submitAt || Date.now() }, tyO(o), 'Closed: ' + o.name))])),
@@ -4686,7 +4688,9 @@ class Core2 extends Core {
     this.setState({ dialog: null, enqOpen: null }); this.toast('Enquiry deleted'); }
   async claimPool(o, myAgents, T) { const u = this.state.user || {}; if (!myAgents.includes(ownKey(o))) return this.toast('This order is not from one of your agents or consultants');
     if (this._claiming) return; this._claiming = true; const L = window.SKZLive;
+    let claimed = false;
     try { if (L && L.on && L.on() && L.sb) { const { data, error } = await L.sb().rpc('claim_order', { p_id: o.id, p_type: T || 'cv' });
+        if (!error && data && data === u.id) claimed = true;
         if (error) { if (!/claim_order/.test(error.message || '')) return this.toast('Not picked: ' + (error.message || 'try again')); }
         // Someone else holds it: show that on this screen only (never save it — this login may not change that order).
         else if (data && data !== u.id) { const put = list => (list || []).map(x => x.id !== o.id ? x : { ...x, ...(T === 'cv' || !T ? { expert: data } : {}), wx: { ...(x.wx || {}), [T || 'cv']: data } });
@@ -4697,7 +4701,11 @@ class Core2 extends Core {
         if (T0 !== 'cv' && full.expert && wx.cv === undefined && getExpert(full, 'cv')) wx.cv = getExpert(full, 'cv');
         wx[T0] = u.id; const p = { wx }; if (T0 === 'cv' || orderTypes(full).length < 2 || !full.expert) p.expert = T0 === 'cv' || orderTypes(full).length < 2 ? u.id : (wx.cv || '');
         if (p.expert === '') delete p.expert;
-        this.updOrder(o.id, p, o.name + ' · ' + String(TYPE_NAME[T0] || T0).replace(/ (expert|trainer)$/i, '') + ' assigned to you'); } } finally { this._claiming = false; } }
+        const okMsg = o.name + ' · ' + String(TYPE_NAME[T0] || T0).replace(/ (expert|trainer)$/i, '') + ' assigned to you';
+        if (claimed) { const put = list => (list || []).map(x => x.id !== o.id ? x : { ...x, ...p, wx: { ...(x.wx || {}), [T0]: u.id } }); // saved by claim_order on the server: never re-send (an expert login may not save assignments)
+          if (this._lastPushed) this._lastPushed = { ...this._lastPushed, orders: put(this._lastPushed.orders) };
+          this.setState(s => ({ data: { ...s.data, orders: put(s.data.orders) } }), () => this.liveCache && this.liveCache()); this.toast(okMsg); setTimeout(() => this.liveRefresh(true), 400); }
+        else this.updOrder(o.id, p, okMsg); } } finally { this._claiming = false; } }
   // Expert work status (Share draft / Submit / Revision / Close). Saved on the server in one locked step
   // (set_task_status): success is shown only after the database confirms, failures say why and change nothing.
   async setSt(o, patch, T, msg) { const L = window.SKZLive, live = LIVE_MODE && L && L.setTaskStatus && L.on && L.on();
@@ -6661,7 +6669,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795443038215';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795450174078';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data); this.livePush(); return; } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
       this._verT = setInterval(chk, 120000); setTimeout(chk, 15000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chk(); }); }
     this._authX = () => { if (!this.state.user) return; try { localStorage.removeItem(SESSION); } catch (e) {} this.setState({ user: null, liveProfile: null, loginErr: 'Your sign-in expired. Please sign in again.' }); };
