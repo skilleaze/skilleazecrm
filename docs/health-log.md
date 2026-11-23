@@ -2,6 +2,26 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 24 Nov 2026, 03:25 IST · automatic check (window 00:23–03:23 IST)
+**Checked**: API errors, database errors (none), edge functions (admin-users all 200), logins (token refreshes
+only, no failures), security advisors (same long-standing warnings, nothing new), runbook data checks (read-only
+SQL worked). Live version.txt not checked (admin.skilleaze.com unreachable from the sandbox; repo = b1795450174078).
+**Found**
+- Quiet window. Refusals only: almisha 16 rounds (00:57–01:00 IST, then stopped) and MUNEEBA 1 round (01:31 IST),
+  all 403 / 42501. Loops now stop on their own; the zahir / MUNEEBA tight loops from the last entry did not return.
+- Data checks clean: status = extra.status, single-service tst = status, no CLOSED without closeAt, no pending
+  transfer older than 7 days, every open assignment in wx has an order_experts row, HR person_key matches.
+- **New:** SAN-1794807224485 (16 Nov, PENDING) is assigned CV = `FATHIMA.HANA`, which matches no login. Agent SAN
+  typed it on 16 Nov 23:17 IST (activity_log). No expert sees this order. It could mean FATHIMATH HANA or HANA, so
+  it was not changed.
+- ALPHA-1795272437380 still CV = THOIBA (unchanged since last entry).
+**Fixed**: nothing. SQL 50 was assembled with its rollback test and sent, but the SQL tool again stopped to ask
+for an approval nobody was there to give, so it was neither tested nor applied (no change made).
+**Needs the owner**
+1. SAN-1794807224485: ask SAN / operations which expert was meant and re-assign it.
+2. Still open from last entry: run `docs/pending-sql/50_test.sql` then 50; then re-set ALPHA-1795272437380
+   (CV = HAFSATH MUYEENA, LinkedIn = THOIBA); allow the Supabase SQL tool to run writes without asking.
+
 ## 24 Nov 2026, 00:35 IST · automatic check (window 21:23–00:23 IST)
 **Checked**: API errors, database errors, edge functions (none), logins (5 wrong passwords + 2 expired
 refresh tokens, noise), security advisors (same long-standing warnings, nothing new). Read-only SQL worked
