@@ -6646,7 +6646,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795424570579';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795429356196';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data); this.livePush(); return; } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
       this._verT = setInterval(chk, 120000); setTimeout(chk, 15000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chk(); }); }
     this._authX = () => { if (!this.state.user) return; try { localStorage.removeItem(SESSION); } catch (e) {} this.setState({ user: null, liveProfile: null, loginErr: 'Your sign-in expired. Please sign in again.' }); };

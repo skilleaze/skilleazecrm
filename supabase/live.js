@@ -146,8 +146,14 @@
     return d;
   }
 
+  // A login whose session is gone keeps "working" as an anonymous visitor: the screen shows cached orders
+  // but every save is refused. Check first and send the person back to Sign in (unsaved changes stay on the device).
+  async function haveSession() { try { const r = await sb().auth.getSession(); return !!(r && r.data && r.data.session); } catch (e) { return true; } }
+  function signedOut() { try { window.dispatchEvent(new CustomEvent('skz-auth-expired')); } catch (e) {} return new Error('Your sign-in expired. Please sign in again.'); }
+
   // Save every change since `prev`. Returns a list of error messages.
   async function push(prev, next, getExpert, isMgmt, progress) {
+    if (!(await haveSession())) return [signedOut().message];
     const c = sb(), jobs = [], errs = [], failed = new Set();
     const rls = e => /row-level security|42501/i.test(String((e && (e.message || e.code)) || ''));
     const one = async (k, x) => { const row = ROW[k](x); try { await c.from(TBL[k]).upsert([row], { onConflict: 'id' }).then(chk); } catch (e1) { if (!rls(e1)) { failed.add(x.id); throw e1; } const { id, ...rest } = row; const u = await c.from(TBL[k]).update(rest).eq('id', x.id).select('id'); if (u.error || !(u.data || []).length) { failed.add(x.id); throw e1; } } };
@@ -363,6 +369,7 @@ const patchJob = (k, o, x) => async () => { const ra = ROW[k](o), rb = ROW[k](x)
   // Expert work status: one server-side, locked, all-or-nothing change. Resolves with the saved order, or throws.
   async function setTaskStatus(id, status, task, types) {
     const args = { p_id: String(id), p_status: status, p_task: task || null, p_types: types && types.length > 1 ? types : null };
+    if (!(await haveSession())) throw signedOut();
     let r = await sb().rpc('set_task_status', args);
     if (r.error && isAuthErr(r.error) && await fixAuth()) r = await sb().rpc('set_task_status', args);
     if (r.error) throw r.error;
