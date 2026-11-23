@@ -45,7 +45,7 @@ Private keys (VAPID private key, service role key, DB password) are **not** in t
 > In plain claude.ai chat, paste only the function you need. Find it by searching the file for its name first (for example `putMonth(`, `trRowsX(`, `updOrder(`). Then ask for a find → replace pair.
 
 ## 4. Database changes (SQL)
-- **File naming:** put each change in the next numbered file in `supabase/`. **46 is used; next is `47_…sql`.** Write the SQL so it is safe to run twice: `create or replace`, `drop … if exists`, `on conflict do nothing`.
+- **File naming:** put each change in the next numbered file in `supabase/`. **47 is used; next is `48_…sql`.** Write the SQL so it is safe to run twice: `create or replace`, `drop … if exists`, `on conflict do nothing`.
 - **Running it:** paste it into Supabase → SQL Editor and run it.
   - Give the SQL inline in chat as well as in the file.
   - Avoid the `?` jsonb operator and `$$` quoting, because the editor can break them. Use `$fn$` and `(x->>'k') is not null`.
@@ -59,6 +59,8 @@ Private keys (VAPID private key, service role key, DB password) are **not** in t
   - `trg_a_sync_tst`: the task-status map follows the status on single-service orders.
 - **Puttur ads:** `trg_puttur_ads_keep` on `app_kv` merges `puttur.ads` by id, so a save never deletes other days.
 - **Audit:** every change is written to `activity_log`. Use it to recover lost data.
+- **Expert work status (47):** experts change status only through the `set_task_status(p_id, p_status, p_task, p_types)` function (app: `setSt(`, live.js: `setTaskStatus`). It checks assignment, locks the row, merges per-service status on combined orders and returns the saved row; the app shows success only after it returns. Experts can never move work back to Not started. `patch_extra` raises an error when an order update hits 0 rows (no more silent "saved").
+- **Combined orders (CV + LinkedIn etc.):** overall `status` = least advanced service, so it stays PENDING until every service moves. Experts see their own task status (`_wsData` projection in `renderVals`); management/ops see "In progress · n/N closed".
 
 ## 5. Business rules (do not change without the owner)
 - **Pre-CRM period is locked.** Everything up to and including **1 Nov 2026** comes from the agents' account sheets via `35_sheet_reconcile.sql` (FIX35-* adjustment lines). Never change data dated before 2 Nov without re-running that check. The CRM started on **2 Nov 2026**.
@@ -102,7 +104,8 @@ Private keys (VAPID private key, service role key, DB password) are **not** in t
 |---|---|
 | Build id | `const BUILD =` |
 | Save an order | `updOrder(` |
-| Combined-order task status | `taskSt`, `taskTypes`, `ST_RANK`, `tst` |
+| Combined-order task status | `taskSt`, `taskTypes`, `ST_RANK`, `tst`, `_wsData`, `mNote` |
+| Expert status save | `setSt(`, `set_task_status`, `setTaskStatus` |
 | Expert queue | `Take new work`, `isStart(`, `shareLbl` |
 | Puttur month maths | `putMonth(` |
 | Puttur orders (manager / consultant) | `isPutOrders`, `pOrdQ`, `cseOrdQ` |

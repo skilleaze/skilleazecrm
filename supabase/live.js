@@ -159,7 +159,7 @@
       const DEL = window.__skzDel || (window.__skzDel = new Set()), del = [...left.keys()].filter(id => id && DEL.has(id)); del.forEach(id => DEL.delete(id));
 const patchJob = (k, o, x) => async () => { const ra = ROW[k](o), rb = ROW[k](x), p = {}; let ex = null;
         Object.keys(rb).forEach(f => { if (f === 'id') return; if (JSON.stringify(ra[f]) === JSON.stringify(rb[f])) return; if (f === 'extra' && ra.extra && rb.extra && typeof rb.extra === 'object') { const set = {}, unset = []; Object.keys(rb.extra).forEach(q => { if (JSON.stringify(ra.extra[q]) !== JSON.stringify(rb.extra[q])) set[q] = rb.extra[q]; }); Object.keys(ra.extra).forEach(q => { if (!(q in rb.extra)) unset.push(q); }); ex = { set, unset }; } else p[f] = rb[f]; });
-        if (Object.keys(p).length) await c.from(TBL[k]).update(p).eq('id', x.id).then(chk);
+        if (Object.keys(p).length) { if (k === 'orders') { const ur = await c.from(TBL[k]).update(p).eq('id', x.id).select('id'); if (ur.error) throw ur.error; if (!(ur.data || []).length) throw new Error('Not saved: order ' + x.id + ' is not open to your login or was removed'); } else await c.from(TBL[k]).update(p).eq('id', x.id).then(chk); }
         if (ex && (Object.keys(ex.set).length || ex.unset.length)) { const rr = await c.rpc('patch_extra', { p_table: TBL[k], p_id: String(x.id), p_set: ex.set, p_unset: ex.unset }); if (rr.error) { if (/function|PGRST202|not exist/i.test(String(rr.error.message || rr.error.code || ''))) await c.from(TBL[k]).update({ extra: rb.extra }).eq('id', x.id).then(chk); else throw rr.error; } } };
       for (let i = 0; i < added.length; i += 200) { const part = added.slice(i, i + 200); jobs.push(async () => { try { await c.from(TBL[k]).upsert(part.map(ROW[k]), { onConflict: 'id' }).then(chk); } catch (e0) { let bad = null; for (const x of part) { try { await one(k, x); } catch (e1) { bad = bad || e1; } } if (bad) throw bad; } }); }
       changed.forEach(x => jobs.push(patchJob(k, pm.get(x.id), x)));
@@ -360,7 +360,16 @@ const patchJob = (k, o, x) => async () => { const ra = ROW[k](o), rb = ROW[k](x)
   async function chatDelete(id) { const r = await sb().from('chat_messages').delete().eq('id', id); if (r.error) throw r.error; return true; }
   async function pushTest() { try { const r = await sb().functions.invoke('push-send', { body: { kind: 'test' } }); if (r.error) { let st = 0, msg = r.error.message || ''; try { st = r.error.context && r.error.context.status || 0; } catch (e) {} return { ok: false, status: st, msg }; } return { ok: true, data: r.data || {} }; } catch (e) { return { ok: false, status: 0, msg: (e && e.message) || 'network' }; } }
   async function chatStorageTest(gid) { const c = sb(), path = String(gid || '').replace(/\|/g, ',') + '/check-' + Date.now().toString(36) + '.txt'; const r = await c.storage.from('chat').upload(path, new Blob(['ok'], { type: 'text/plain' }), { upsert: false, contentType: 'text/plain' }); if (r.error) return { ok: false, msg: r.error.message || 'upload failed' }; const u = await c.storage.from('chat').createSignedUrl(path, 60); try { await c.storage.from('chat').remove([path]); } catch (e) {} return u.error ? { ok: false, msg: 'upload ok, reading failed: ' + u.error.message } : { ok: true }; }
-  window.SKZLive = { subscribeAll, syncState, loadDelta, chatMediaPub, chatDelete, pushTest, chatStorageTest, chatMediaUp, chatMediaUrl, rtStart, rtStop, pushSave, pushRemove, pushSend, chatLoad, chatSend, chatGroupSave, chatGroupDel, issuesFetch, lookupRemote, docUpload, docUrl, docOpen, setPersonKey, on, sb, photosLoad, photoUpload, loadChanges, applyChanges, signIn, session, profile, profiles, signOut, changePassword, touch, load, push, admin, bulkCreate };
+  // Expert work status: one server-side, locked, all-or-nothing change. Resolves with the saved order, or throws.
+  async function setTaskStatus(id, status, task, types) {
+    const args = { p_id: String(id), p_status: status, p_task: task || null, p_types: types && types.length > 1 ? types : null };
+    let r = await sb().rpc('set_task_status', args);
+    if (r.error && isAuthErr(r.error) && await fixAuth()) r = await sb().rpc('set_task_status', args);
+    if (r.error) throw r.error;
+    if (!r.data || !r.data.id) throw new Error('Not saved: no reply from the server');
+    return MAP.orders(r.data);
+  }
+  window.SKZLive = { setTaskStatus, subscribeAll, syncState, loadDelta, chatMediaPub, chatDelete, pushTest, chatStorageTest, chatMediaUp, chatMediaUrl, rtStart, rtStop, pushSave, pushRemove, pushSend, chatLoad, chatSend, chatGroupSave, chatGroupDel, issuesFetch, lookupRemote, docUpload, docUrl, docOpen, setPersonKey, on, sb, photosLoad, photoUpload, loadChanges, applyChanges, signIn, session, profile, profiles, signOut, changePassword, touch, load, push, admin, bulkCreate };
   window.SKZLive.chatLoad = async () => ({ groups: [], msgs: [], messages: [], since: new Date().toISOString(), off: true });
   window.SKZLive.chatSend = async () => { throw new Error('Chat has been removed'); };
   window.SKZLive.chatGroupSave = async () => { throw new Error('Chat has been removed'); };

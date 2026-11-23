@@ -3118,8 +3118,11 @@ class Base extends DCLogic {
     this._refBusy = true; const since = this._liveSyncedAt;
     L.loadDelta(since).then(delta => { this._refBusy = false; if (!delta || !delta.n) { this._liveSyncedAt = delta ? delta.syncedAt : since; return; }
       const drop = d0 => { if (!delta.del) return d0; const o2 = { ...d0 }; Object.entries(delta.del).forEach(([k, ids]) => { const S = new Set(ids); if (Array.isArray(o2[k])) o2[k] = o2[k].filter(x => !S.has(String(x.id))); }); return o2; };
-      const cur = this.state.data, mine = drop(L.applyChanges(cur, delta)); this._lastPushed = this._lastPushed ? drop(L.applyChanges(this._lastPushed, delta)) : mine; this._liveSyncedAt = delta.syncedAt;
-      applyMaster(mine); applyUsers(mine); this.setState({ data: mine }, () => { this.liveCache && this.liveCache(); }); }).catch(() => { this._refBusy = false; }); }
+      // Orders edited on this device but not saved yet must survive the incoming server copy (it would put back the old status).
+      const cur = this.state.data, lpm = new Map(((this._lastPushed && this._lastPushed.orders) || []).map(o => [o.id, o])), dirty = new Map(this._lastPushed && this._lastPushed !== cur ? (cur.orders || []).filter(o => lpm.get(o.id) !== o).map(o => [o.id, o]) : []);
+      let mine = drop(L.applyChanges(cur, delta)); if (dirty.size) mine = { ...mine, orders: (mine.orders || []).map(o => dirty.get(o.id) || o) };
+      this._lastPushed = this._lastPushed ? drop(L.applyChanges(this._lastPushed, delta)) : mine; this._liveSyncedAt = delta.syncedAt;
+      applyMaster(mine); applyUsers(mine); this.setState({ data: mine }, () => { this.liveCache && this.liveCache(); if (dirty.size) this.livePush(); }); }).catch(() => { this._refBusy = false; }); }
   livePush() { const L = window.SKZLive; if (L && this.state.data && !this._liveReady && this._lastPushed && this._lastPushed !== this.state.data) { this.outboxSave(this._lastPushed, this.state.data); this.setState({ liveUnsaved: this.outboxCount() }); clearTimeout(this._readyT); this._readyT = setTimeout(() => this.livePush(), 3000); return; } if (!this._liveReady || !L || !this.state.data) return; if (this._pushing) { this._pushAgain = true; return; }
     const prev = this._lastPushed, next = this.state.data; if (prev === next) return; this._pushing = true; this.setState({ liveSaving: true });
     L.push(prev, next, getExpert, (this.state.user || {}).role === 'management').then(errs => { this._pushing = false;
@@ -3519,10 +3522,10 @@ class Base extends DCLogic {
           pool: { has: pool.length > 0, count: pool.length, items: pool.slice(0, 6).map(o => ({ ...card(o, []), claim: () => this.claimPool(o, myAgents, SK.length < 2 ? (orderTypes(o).find(t => skillsOf(u.id).includes(t)) || 'cv') : WT), hide: () => hideIt(o) })),
             taken: (() => { const td = iso(new Date()); const tk = d.orders.filter(o => !o.summary && o.date === td && myAgents.includes(ownKey(o)) && (SK.length < 2 ? fitsType(u.id, o) : orderTypes(o).includes(WT))).map(o => { const T = SK.length < 2 ? (orderTypes(o).find(t => skillsOf(u.id).includes(t)) || 'cv') : WT, who = getExpert(o, T); return who && who !== u.id ? { name: o.name || 'Customer', by: 'Assigned to: ' + tc(who), agent: agentLabel(ownKey(o)), svc: (o.services || []).map(x => SVC_NICE[x] || tc(x)).join(' + ') } : null; }).filter(Boolean); return { has: tk.length > 0, items: tk.slice(0, 12), count: tk.length }; })() },
           columns: [
-            col(SL('PENDING'), CUR_T === 'interview' ? 'Book a session with the customer' : 'Urgent first, then newest', pend, o => card(o, [A(shareLbl(o), () => this.updOrder(o.id, { status: 'DRAFT SHARED' }, SL('DRAFT SHARED', tyO(o)) + ': ' + o.name), true), A(SL('CV SUBMITTED', tyO(o)), () => this.updOrder(o.id, { status: 'CV SUBMITTED', submitAt: Date.now() }, SL('CV SUBMITTED', tyO(o)) + ': ' + o.name)), A('Close · not mine', () => this.ask('Give ' + o.name + ' back? It leaves your queue and goes back to ' + agentLabel(o.agent) + ' and operations to assign to the right expert.', () => { const T = tyO(o), wx = { ...(o.wx || {}) }; if (wx[T] !== undefined) wx[T] = ''; this.updOrder(o.id, { expert: '', wx }, o.name + ' given back to operations'); }, 'Give back', true))])),
-            col(SL('DRAFT SHARED'), CUR_T === 'interview' ? 'Session booked with the customer' : 'Waiting for customer feedback', draft, o => card(o, [A(SL('CV SUBMITTED', tyO(o)), () => this.updOrder(o.id, { status: 'CV SUBMITTED', submitAt: Date.now() }, SL('CV SUBMITTED', tyO(o)) + ': ' + o.name), true), A(tyO(o) === 'interview' ? 'Follow-up' : 'Revision', () => this.updOrder(o.id, { status: 'REVISION' }, SL('REVISION', tyO(o))))])),
-            col(SL('CV SUBMITTED'), CUR_T === 'interview' ? 'Close once the customer is done' : 'Waiting for customer approval', sub, o => card(o, [A('Close', () => this.updOrder(o.id, { status: 'CLOSED', closeAt: Date.now(), submitAt: o.submitAt || Date.now() }, 'Closed: ' + o.name), true), A(tyO(o) === 'interview' ? 'Follow-up' : 'Revision', () => this.updOrder(o.id, { status: 'REVISION' }, SL('REVISION', tyO(o))))])),
-            col(SL('REVISION'), CUR_T === 'interview' ? 'Customer needs another session' : 'Customer asked for changes', rev, o => card(o, [A('Resubmit', () => this.updOrder(o.id, { status: 'CV SUBMITTED', submitAt: o.submitAt || Date.now() }, 'Resubmitted'), true), A('Close', () => this.updOrder(o.id, { status: 'CLOSED', closeAt: Date.now(), submitAt: o.submitAt || Date.now() }, 'Closed: ' + o.name))])),
+            col(SL('PENDING'), CUR_T === 'interview' ? 'Book a session with the customer' : 'Urgent first, then newest', pend, o => card(o, [A(shareLbl(o), () => this.setSt(o, { status: 'DRAFT SHARED' }, tyO(o), SL('DRAFT SHARED', tyO(o)) + ': ' + o.name), true), A(SL('CV SUBMITTED', tyO(o)), () => this.setSt(o, { status: 'CV SUBMITTED', submitAt: Date.now() }, tyO(o), SL('CV SUBMITTED', tyO(o)) + ': ' + o.name)), A('Close · not mine', () => this.ask('Give ' + o.name + ' back? It leaves your queue and goes back to ' + agentLabel(o.agent) + ' and operations to assign to the right expert.', () => { const T = tyO(o), wx = { ...(o.wx || {}) }; if (wx[T] !== undefined) wx[T] = ''; this.updOrder(o.id, { expert: '', wx }, o.name + ' given back to operations'); }, 'Give back', true))])),
+            col(SL('DRAFT SHARED'), CUR_T === 'interview' ? 'Session booked with the customer' : 'Waiting for customer feedback', draft, o => card(o, [A(SL('CV SUBMITTED', tyO(o)), () => this.setSt(o, { status: 'CV SUBMITTED', submitAt: Date.now() }, tyO(o), SL('CV SUBMITTED', tyO(o)) + ': ' + o.name), true), A(tyO(o) === 'interview' ? 'Follow-up' : 'Revision', () => this.setSt(o, { status: 'REVISION' }, tyO(o), SL('REVISION', tyO(o))))])),
+            col(SL('CV SUBMITTED'), CUR_T === 'interview' ? 'Close once the customer is done' : 'Waiting for customer approval', sub, o => card(o, [A('Close', () => this.setSt(o, { status: 'CLOSED', closeAt: Date.now(), submitAt: o.submitAt || Date.now() }, tyO(o), 'Closed: ' + o.name), true), A(tyO(o) === 'interview' ? 'Follow-up' : 'Revision', () => this.setSt(o, { status: 'REVISION' }, tyO(o), SL('REVISION', tyO(o))))])),
+            col(SL('REVISION'), CUR_T === 'interview' ? 'Customer needs another session' : 'Customer asked for changes', rev, o => card(o, [A('Resubmit', () => this.setSt(o, { status: 'CV SUBMITTED', submitAt: o.submitAt || Date.now() }, tyO(o), 'Resubmitted'), true), A('Close', () => this.setSt(o, { status: 'CLOSED', closeAt: Date.now(), submitAt: o.submitAt || Date.now() }, tyO(o), 'Closed: ' + o.name))])),
             col('Closed · ' + RG.label, 'Completed in the dates picked above · newest first', closedToday, o => card(o, []))
           ]
         });
@@ -4075,7 +4078,11 @@ class Core extends Base {
     this._viewType = !uu ? null : isOpsU ? ws : null;
     const vt = this._viewType; CUR_T = vt || 'cv'; EXP_WS = (uu && uu.role === 'expert' && skillsOf(uu.id).includes(this.state.expWs)) ? this.state.expWs : 'all'; _ORD = this.state.data ? this.state.data.orders : [];
     this._wsData = vt && this.state.data ? { ...this.state.data, orders: this.state.data.orders.filter(o => orderTypes(o).includes(vt)).map(o => ({ ...o, expert: getExpert(o, vt) })) }
-      : uu && uu.role === 'expert' && this.state.data ? { ...this.state.data, orders: this.state.data.orders.map(o => { const myT = taskTypes(o).filter(T => exN(getExpert(o, T)) === exN(uu.id)); if (!myT.length) return o; const sv = (o.services || []).filter(x => myT.includes(svcType(x)) || (myT.includes('cv') && !ALL_T.includes(svcType(x)))); return { ...o, expert: uu.id, services: sv.length ? sv : o.services, allServices: o.services }; }) } : null;
+      : uu && uu.role === 'expert' && this.state.data ? { ...this.state.data, orders: this.state.data.orders.map(o => { const myT = taskTypes(o).filter(T => exN(getExpert(o, T)) === exN(uu.id)); if (!myT.length) return o; const sv = (o.services || []).filter(x => myT.includes(svcType(x)) || (myT.includes('cv') && !ALL_T.includes(svcType(x))));
+          // A combined order shown with only this expert's service must also show this expert's task status,
+          // not the overall status (which stays "Not started" until every service moves).
+          let tx = {}; if (myT.length === 1 && taskTypes(o).length > 1) { const T = myT[0], st = taskSt(o, T), c = (o.tAt || {})[T] || {}; tx = { status: st, _overall: o.status, closeAt: st === 'CLOSED' ? (c.CLOSED || o.closeAt || o.submitAt || o.payAt) : null, submitAt: ST_RANK[st] >= 3 ? (c['CV SUBMITTED'] || o.submitAt || c.CLOSED || o.payAt) : o.submitAt }; }
+          return { ...o, expert: uu.id, services: sv.length ? sv : o.services, allServices: o.services, ...tx }; }) } : null;
     if (this.state.data && !this._acctSync) { this._acctSync = true; loadReal().then(j => { const B0 = (j && j.transferAcct) || {}; const cur = this.state.data.transferAcct || {}; const add = {}; Object.entries(B0).forEach(([k, v]) => { if (v && v !== 'none' && (!cur[k] || cur[k] === 'none')) add[k] = v; }); if (Object.keys(add).length) this.setData(dd => ({ ...dd, transferAcct: { ...(dd.transferAcct || {}), ...add } })); }).catch(() => {}); }
     if (this._pendSess && this.state.data && !this.state.user) { const ss = this._pendSess; this._pendSess = null; if (Object.values(ACCOUNTS).some(a => a.role === ss.role && a.id === ss.id)) setTimeout(() => this.login(ss.role, ss.id), 0); else { try { localStorage.removeItem(SESSION); } catch (e) {} } }
     { const u0 = this.state.user, a0 = u0 && Object.values(ACCOUNTS).find(a => a.role === u0.role && a.id === u0.id);
@@ -4163,17 +4170,21 @@ class Core extends Base {
     if (v.columns) v.columns = v.columns.map((c, i) => ({ ...c, dot: ['#e0a13a', B, RED, '#2e9a5c'][i], items: c.items.map(it => ({ ...it, kColor: it.urgent ? '#b3140f' : String(it.kColor).includes('--color-accent)') ? '#8a5300' : MUTED, actions: it.actions.map(a => a.cls === 'btn-primary' ? { ...a, bg: B, fg: '#fff', bd: B } : { ...a, bg: '#fff', fg: INK, bd: LINE }) })) }));
     const byIdAll = new Map(s.data.orders.map(q => [q.id, q])), role0 = u.role;
     if (v.orderRows) v.orderRows = v.orderRows.map(o => {
-      const ord = byIdAll.get(o.id), eT = u.role === 'expert' && taskTypes(ord).length > 1 ? myTaskT(ord, u.id) : '', cur = eT ? pipeOf({ status: taskSt(ord, eT) }) : pipeOf(ord), tRow = eT || rowType(ord), c = SOLID[pipeLabel(cur, 'cv')] || SOLID['Not started'];
+      const ord = byIdAll.get(o.id), eT = u.role === 'expert' && taskTypes(ord).length > 1 ? myTaskT(ord, u.id) : '', cur = eT ? pipeOf({ status: taskSt(ord, eT) }) : pipeOf(ord), tRow = eT || rowType(ord);
+      // Combined orders (e.g. CV + LinkedIn): overall stays "Not started" until every service moves, so show the real progress instead.
+      const mTs = eT ? [] : taskTypes(ord), mMoved = mTs.length > 1 && cur === 'PENDING' && mTs.some(t => taskSt(ord, t) !== 'PENDING'), mNote = mMoved ? 'In progress · ' + mTs.filter(t => taskSt(ord, t) === 'CLOSED').length + '/' + mTs.length + ' closed' : '';
+      const c = SOLID[pipeLabel(mMoved ? 'DRAFT SHARED' : cur, 'cv')] || SOLID['Not started'];
       const isDhiya = role0 === 'ops' && !me.ordersOnly;
       let allowed = u.role === 'management' || isDhiya ? PIPE.map(p => p[0]) : (PIPE_BY_ROLE[u.role] || []);
       if (u.role === 'expert' && ord.pay === 'PARTIAL') allowed = ['DRAFT SHARED', 'REVISION'];
       if (ord.pay === 'REFUNDED') allowed = [];
-      const opts = PIPE.filter(p => p[0] === cur || allowed.includes(p[0])).map(([value]) => ({ value, label: SL(value, tRow) }));
+      const opts = PIPE.filter(p => p[0] === cur || allowed.includes(p[0])).map(([value]) => ({ value, label: value === cur && mNote ? mNote : SL(value, tRow) }));
       const canPipe = opts.length > 1;
       const setPipe = e => { const x = e.target.value, q = s.data.orders.find(z => z.id === o.id), p = { status: x };
         if (q.pay === 'PARTIAL' && ['CV SUBMITTED', 'CLOSED'].includes(x) && u.role === 'expert') return this.toast('Balance not received yet. Share draft only');
         if (x === 'CV SUBMITTED' && !q.submitAt) p.submitAt = Date.now();
         if (x === 'CLOSED') { p.closeAt = q.closeAt || Date.now(); p.submitAt = q.submitAt || Date.now(); } else p.closeAt = null;
+        if (u.role === 'expert') return this.setSt(q, p, eT || null, o.name + ' → ' + SL(x, tRow));
         this.updOrder(o.id, p, o.name + ' → ' + SL(x, tRow)); };
       const payKey = ord.pay || 'PAID', pc = SOLID[(PAY_ST.find(p => p[0] === payKey) || PAY_ST[0])[1]];
       const canPay = u.role === 'sales' || u.role === 'management';
@@ -4192,7 +4203,7 @@ class Core extends Base {
       const viaText = ord.pay === 'REFUNDED' ? '' : VIA_L[ord.via || 'personal'] + stT(ord.via, ord.proofStatus) + (ord.balanceVia ? ' + ' + VIA_L[ord.balanceVia] + stT(ord.balanceVia, ord.balanceProofStatus) : '');
       const proofs = [ord.proof && { label: 'Payment · ' + VIA_L[ord.via], img: ord.proof }, ord.balanceProof && { label: 'Balance · ' + VIA_L[ord.balanceVia], img: ord.balanceProof }].filter(Boolean);
       const aedNote = ord.currency === 'AED' ? 'AED ' + ord.aed + ' × ' + AED_RATE : '';
-      return { ...o, aedNote, viaText, hasProof: proofs.length > 0, viewProof: () => this.openDialog('proof', { items: proofs }), isUrgentRow: urgent, payKey, payText: (PAY_ST.find(p => p[0] === payKey) || PAY_ST[0])[1], payOpts, canPayDd: canPay, noPayDd: !canPay, setPayS: setPay, pBg: pc[0], pFg: pc[1], isPartial: ord.pay === 'PARTIAL', partialDue: inr(ord.price - ord.paid) + ' due', actions, hasActions: actions.length > 0, pipe: cur, pipeText: SL(cur, tRow), pipeOpts: opts, canPipe, noPipe: !canPipe, setPipe, stBg: c[0], stFg: c[1] };
+      return { ...o, aedNote, viaText, hasProof: proofs.length > 0, viewProof: () => this.openDialog('proof', { items: proofs }), isUrgentRow: urgent, payKey, payText: (PAY_ST.find(p => p[0] === payKey) || PAY_ST[0])[1], payOpts, canPayDd: canPay, noPayDd: !canPay, setPayS: setPay, pBg: pc[0], pFg: pc[1], isPartial: ord.pay === 'PARTIAL', partialDue: inr(ord.price - ord.paid) + ' due', actions, hasActions: actions.length > 0, pipe: cur, pipeText: mNote || SL(cur, tRow), pipeOpts: opts, canPipe, noPipe: !canPipe, setPipe, stBg: c[0], stFg: c[1] };
     });
     const role = u.role, d = this._wsData || s.data, TODAY = iso(new Date()), month = this.curMonth(), RG = rangeOf(s, TODAY, 'month'), inRg = o => o.date >= RG.from && o.date <= RG.to, inPts = o => { const pd = ptsDay(o); return !!pd && pd >= RG.from && pd <= RG.to; };
     v.showPeriod = false;
@@ -4669,6 +4680,20 @@ class Core2 extends Core {
         if (error) { if (!/claim_order/.test(error.message || '')) return this.toast('Not picked: ' + (error.message || 'try again')); }
         else if (data && data !== u.id) { this.setData(dd => ({ ...dd, orders: dd.orders.map(x => x.id !== o.id ? x : { ...x, ...(T === 'cv' || !T ? { expert: data } : {}), wx: { ...(x.wx || {}), [T || 'cv']: data } }) })); return this.toast('Already taken by ' + tc(data)); } }
       this.updOrder(o.id, { expert: u.id, wx: { ...(o.wx || {}), [T || 'cv']: u.id } }, o.name + ' assigned to you'); } finally { this._claiming = false; } }
+  // Expert work status (Share draft / Submit / Revision / Close). Saved on the server in one locked step
+  // (set_task_status): success is shown only after the database confirms, failures say why and change nothing.
+  async setSt(o, patch, T, msg) { const L = window.SKZLive, live = LIVE_MODE && L && L.setTaskStatus && L.on && L.on();
+    if (!live) return this.updOrder(o.id, patch, msg);
+    const ord = (this.state.data.orders || []).find(q => q.id === o.id) || o, types = taskTypes(ord);
+    this._stBusy = this._stBusy || {}; if (this._stBusy[o.id]) return; this._stBusy[o.id] = true; this.setState({ liveSaving: true });
+    try { const row = await L.setTaskStatus(o.id, patch.status, types.length > 1 ? (T || null) : null, types);
+      const put = list => (list || []).map(x => x.id === row.id ? row : x);
+      if (this._lastPushed) this._lastPushed = { ...this._lastPushed, orders: put(this._lastPushed.orders) };
+      this.setState(s => ({ liveSaving: false, data: { ...s.data, orders: put(s.data.orders) } }), () => this.liveCache && this.liveCache());
+      if (msg) this.toast(msg);
+    } catch (e) { const m = String((e && (e.message || e.details)) || e || 'try again').replace(/^Not saved:\s*/i, '');
+      this.setState({ liveSaving: false }); this.toast((/fetch|network|offline|load failed/i.test(m) ? 'No internet. ' : 'Not saved: ' + m.slice(0, 120) + '. ') + 'Nothing was changed, try again.');
+    } finally { delete this._stBusy[o.id]; } }
   openConvert(id) { const eq = (putOf(this.state.data).enquiries || []).find(x => x.id === id) || {}; this.openDialog('pOrder'); this.setState(s => ({ form: { ...s.form, name: eq.name || '', phone: eq.phone || '', enqId: id, enqNote: '', source: eq.source || '', bde: eq.by && eq.by !== 'MGR' ? eq.by : s.form.bde } })); }
   enqVals(v, P, u, pm, kk, prim, mine) {
     const s = this.state, staffNm = id => String(id || '').startsWith('MGMT:') ? tc(String(id).slice(5) || 'Management') + ' · Management' : (P.staff.find(x => x.id === id) || {}).name || (id === 'MGR' ? 'Mohammed Munavvir' : 'Manager');
@@ -6613,7 +6638,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795275963696';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795423309191';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data); this.livePush(); return; } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
       this._verT = setInterval(chk, 120000); setTimeout(chk, 15000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chk(); }); }
     this._authX = () => { if (!this.state.user) return; try { localStorage.removeItem(SESSION); } catch (e) {} this.setState({ user: null, liveProfile: null, loginErr: 'Your sign-in expired. Please sign in again.' }); };
