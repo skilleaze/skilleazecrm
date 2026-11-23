@@ -154,9 +154,12 @@
   // Save every change since `prev`. Returns a list of error messages.
   async function push(prev, next, getExpert, isMgmt, progress) {
     if (!(await haveSession())) return [signedOut().message];
-    const c = sb(), jobs = [], errs = [], failed = new Set();
+    const c = sb(), jobs = [], errs = [], failed = new Set(), denied = [];
+    // Refusals that can never succeed on a retry (permission / business rule), as opposed to network trouble.
+    const isDenied = e => /row-level security|42501|not open to your login|Experts can only|cannot be changed|read-only|Only management|Only the assigned/i.test(String((e && (e.message || e.code || e.details)) || e || ''));
+    const deny = (k, id, e) => { if (isDenied(e) && !denied.some(d => d.k === k && d.id === id)) denied.push({ k, id }); };
     const rls = e => /row-level security|42501/i.test(String((e && (e.message || e.code)) || ''));
-    const one = async (k, x) => { const row = ROW[k](x); try { await c.from(TBL[k]).upsert([row], { onConflict: 'id' }).then(chk); } catch (e1) { if (!rls(e1)) { failed.add(x.id); throw e1; } const { id, ...rest } = row; const u = await c.from(TBL[k]).update(rest).eq('id', x.id).select('id'); if (u.error || !(u.data || []).length) { failed.add(x.id); throw e1; } } };
+    const one = async (k, x) => { const row = ROW[k](x); try { await c.from(TBL[k]).upsert([row], { onConflict: 'id' }).then(chk); } catch (e1) { if (!rls(e1)) { failed.add(x.id); deny(k, x.id, e1); throw e1; } const { id, ...rest } = row; const u = await c.from(TBL[k]).update(rest).eq('id', x.id).select('id'); if (u.error || !(u.data || []).length) { failed.add(x.id); deny(k, x.id, u.error || e1); throw u.error || e1; } } };
     prev = prev || {}; prev = { ...prev, enq: enqOf(prev) }; next = { ...next, enq: enqOf(next) };
     for (const k of Object.keys(TBL)) {
       const a = prev[k] || [], b = next[k] || []; if (a === b) continue;
@@ -168,7 +171,7 @@ const patchJob = (k, o, x) => async () => { const ra = ROW[k](o), rb = ROW[k](x)
         if (Object.keys(p).length) { if (k === 'orders') { const ur = await c.from(TBL[k]).update(p).eq('id', x.id).select('id'); if (ur.error) throw ur.error; if (!(ur.data || []).length) throw new Error('Not saved: order ' + x.id + ' is not open to your login or was removed'); } else await c.from(TBL[k]).update(p).eq('id', x.id).then(chk); }
         if (ex && (Object.keys(ex.set).length || ex.unset.length)) { const rr = await c.rpc('patch_extra', { p_table: TBL[k], p_id: String(x.id), p_set: ex.set, p_unset: ex.unset }); if (rr.error) { if (/function|PGRST202|not exist/i.test(String(rr.error.message || rr.error.code || ''))) await c.from(TBL[k]).update({ extra: rb.extra }).eq('id', x.id).then(chk); else throw rr.error; } } };
       for (let i = 0; i < added.length; i += 200) { const part = added.slice(i, i + 200); jobs.push(async () => { try { await c.from(TBL[k]).upsert(part.map(ROW[k]), { onConflict: 'id' }).then(chk); } catch (e0) { let bad = null; for (const x of part) { try { await one(k, x); } catch (e1) { bad = bad || e1; } } if (bad) throw bad; } }); }
-      changed.forEach(x => jobs.push(patchJob(k, pm.get(x.id), x)));
+      changed.forEach(x => { const run = patchJob(k, pm.get(x.id), x); jobs.push(async () => { try { await run(); } catch (e) { failed.add(x.id); deny(k, x.id, e); throw e; } }); });
       if (del.length) for (let i = 0; i < del.length; i += 300) { const part = del.slice(i, i + 300); jobs.push(() => c.from(TBL[k]).delete().in('id', part).then(chk)); }
       if (k === 'orders') {
         const mv = added.concat(changed).filter(x => { const o = pm.get(x.id); return !o || T.some(t => getExpert(o, t) !== getExpert(x, t)); });
@@ -182,7 +185,7 @@ const patchJob = (k, o, x) => async () => { const ra = ROW[k](o), rb = ROW[k](x)
                 try {
                   if (a && a !== b) await c.from('order_experts').delete().eq('order_id', x.id).eq('service_type', t).then(chk);
                   if (b) await c.from('order_experts').upsert([{ order_id: x.id, service_type: t, expert_code: b }], { onConflict: 'order_id,service_type' }).then(chk);
-                } catch (e) { if (!/foreign key|23503/i.test(String(e && (e.message || e.code)))) bad = bad || e; } } }
+                } catch (e) { if (!/foreign key|23503/i.test(String(e && (e.message || e.code)))) { bad = bad || e; deny('orders', x.id, e); } } } }
             if (bad) throw bad;
           });
         }
@@ -233,6 +236,7 @@ const patchJob = (k, o, x) => async () => { const ra = ROW[k](o), rb = ROW[k](x)
       try { await jobs[i](); } catch (e) { errs.push((e && (e.message || e.details)) || String(e)); }
       if (progress) progress(i + 1, jobs.length);
     }
+    errs.denied = denied;
     return errs;
   }
 
