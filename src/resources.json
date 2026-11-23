@@ -1,0 +1,92 @@
+{
+  "85093557-1e56-48ef-93a4-ef74b764bddd": {
+    "file": "src/images/logo.png",
+    "mime": "image/png",
+    "compressed": false
+  },
+  "24b39e75-5dcf-444d-856d-5f71a05b8b43": {
+    "file": "src/vendor/supabase-js-2.45.4.min.js",
+    "mime": "application/javascript",
+    "compressed": true
+  },
+  "1403e8b1-ffc9-49cc-a7fd-350c9e12426f": {
+    "file": "supabase/live.js",
+    "mime": "application/javascript",
+    "compressed": true
+  },
+  "659e7e93-3f67-4f07-a003-b55e51dafb80": {
+    "file": "src/vendor/dc-runtime.js",
+    "mime": "text/javascript",
+    "compressed": true
+  },
+  "5fa03d0b-bbbc-4df4-bc29-38092081c5d5": {
+    "file": "supabase/config.js",
+    "mime": "application/javascript",
+    "compressed": true
+  },
+  "c63db167-229b-4524-a3d2-a6e49cec6506": {
+    "file": "src/vendor/react-18.3.1.min.js",
+    "mime": "text/javascript",
+    "compressed": true
+  },
+  "5b83e3f7-dc8f-4471-bf1e-8e6f163fe7a0": {
+    "file": "src/vendor/react-dom-18.3.1.min.js",
+    "mime": "text/javascript",
+    "compressed": true
+  },
+  "367d7cb5-6477-4026-bf06-10bb29321cd9": {
+    "file": "src/fonts/cormorant-cyrillic-ext.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "2839111d-2292-4fa3-bbdd-21ea8860d155": {
+    "file": "src/fonts/cormorant-cyrillic.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "4a3d61df-53d7-4634-9d53-2ad8e544d608": {
+    "file": "src/fonts/cormorant-vietnamese.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "5c05eb12-a568-43f5-afc0-4c1035a36e6c": {
+    "file": "src/fonts/cormorant-latin-ext.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "3d55cdfb-9d7f-4500-99f8-897b78957558": {
+    "file": "src/fonts/cormorant-latin.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "0723fa08-0ce3-4dcd-8063-71069acbbe6c": {
+    "file": "src/fonts/lato-400-latin-ext.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "160106d7-6b5a-4ed6-9773-8712f1ad1d88": {
+    "file": "src/fonts/lato-400-latin.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "18979229-d5e5-45ea-9d4e-7090081e16ae": {
+    "file": "src/fonts/lato-700-latin-ext.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "1ad51435-0243-4216-8904-e90d7765beee": {
+    "file": "src/fonts/lato-700-latin.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "45e89972-5820-410a-9d9a-dd0cf2a91155": {
+    "file": "src/fonts/lato-900-latin-ext.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  },
+  "55780638-5d93-404c-977d-aa51af75d836": {
+    "file": "src/fonts/lato-900-latin.woff2",
+    "mime": "font/woff2",
+    "compressed": false
+  }
+}

@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.bundled
+.vercel
+.env*
+node_modules/
+/preview/

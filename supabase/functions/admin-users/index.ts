@@ -1,4 +1,4 @@
-// Skilleaze CRM · user management (create, reset password, deactivate)
+// Skilleaze CRM · user management (create, reset password, deactivate, delete)
 // Supabase → Edge Functions → Deploy a new function → Via Editor
 // Name: admin-users   → paste this file → Deploy
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -11,7 +11,11 @@ const cors = {
 const DOMAIN = 'skilleaze.com';
 const out = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 
-Deno.serve(async (req) => {
+Deno.serve(async (req) => { try { return await handle(req); } catch (e) { return out({ error: 'Server error: ' + String((e && (e as any).message) || e) }, 500); } });
+
+async function handle(req: Request): Promise<Response> {
+  const reqH = req.headers.get('access-control-request-headers');
+  if (reqH) (cors as any)['Access-Control-Allow-Headers'] = reqH + ', authorization, x-client-info, apikey, content-type';
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
 
@@ -122,4 +126,4 @@ Deno.serve(async (req) => {
   } catch (e) {
     return out({ error: String(e) }, 500);
   }
-});
+}

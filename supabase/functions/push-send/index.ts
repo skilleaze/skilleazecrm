@@ -20,7 +20,7 @@ const AUTO: Record<string, string[]> = {
 };
 const plain = (t: string) => {
   if (!t || t[0] !== '§') return t;
-  try { const o = JSON.parse(t.slice(1)); if (o.k === 'txt') return o.c || ''; return (o.k === 'voice' ? '🎤 Voice message' : '📷 Photo') + (o.c ? ' · ' + o.c : ''); } catch (_) { return t; }
+  try { const o = JSON.parse(t.slice(1)); if (o.k === 'txt') return o.c || ''; return (o.k === 'stk' ? 'Sticker' : o.k === 'voice' ? 'Voice message' : 'Photo') + (o.c ? ' · ' + o.c : ''); } catch (_) { return t; }
 };
 const cut = (s: string, n: number) => (s || '').length > n ? s.slice(0, n - 1) + '…' : (s || '');
 
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
     const myName = me.full_name || me.username;
 
     if (body.kind === 'test') {
-      to = [me.username]; self = true; title = 'Skilleaze HQ'; text = 'Test notification · this device is set up ✅'; tag = 'test'; type = 'chat';
+      to = [me.username]; self = true; title = 'Skilleaze HQ'; text = 'Test notification · this device is set up'; tag = 'test'; type = 'chat';
     } else if (body.kind === 'chat') {
       const { data: m } = await admin.from('chat_messages').select('*').eq('id', body.id).single();
       if (!m) return out({ sent: 0, missing: true });
@@ -121,8 +121,22 @@ Deno.serve(async (req) => {
       const br = body.branch || 'all';
       const cloud = ['sales', 'expert', 'ops', 'management'], puttur = ['manager', 'cse', 'ops', 'management'];
       to = P.filter(p => br === 'all' || (br === 'cloud' ? cloud : puttur).includes(p.role)).map(p => p.username);
-      title = '📣 ' + cut(body.title || 'Announcement', 60); text = cut(body.text || '', 170);
+      title = cut(body.title || 'Announcement', 60); text = cut(body.text || '', 170);
       url = '/?go=hr_me'; tag = 'ann-' + (body.id || Date.now());
+    } else if (body.kind === 'payment') {
+      const { data: o } = await admin.from('orders').select('id,agent_code,name,extra').eq('id', body.id).single();
+      if (!o) return out({ sent: 0, missing: true });
+      const x = o.extra || {}, puttur = x.branch === 'puttur', checker = ['management', 'ops', 'manager'].includes(me.role);
+      const owner = (me.agent_code && me.agent_code === o.agent_code) || (me.staff_id && me.staff_id === x.bde) || (puttur && me.role === 'manager');
+      if (!checker && !owner) return out({ error: 'Not allowed' }, 403);
+      if (body.act === 'updated') {
+        to = P.filter(p => p.role === 'management' || p.role === 'ops' || (puttur && p.role === 'manager')).map(p => p.username);
+        title = 'Payment updated · ' + (o.name || 'order'); text = myName + ' updated the payment. Check it again.'; url = '/?go=confirm';
+      } else {
+        to = P.filter(p => (p.agent_code && p.agent_code === o.agent_code) || (puttur && ((p.staff_id && p.staff_id === x.bde) || p.role === 'manager'))).map(p => p.username);
+        title = 'Payment needs changes · ' + (o.name || 'order'); text = cut(body.note || 'Open the order and tap Update payment.', 160); url = '/?go=orders';
+      }
+      tag = 'pay-' + o.id; type = 'issue';
     } else return out({ error: 'Unknown kind' }, 400);
 
     to = [...new Set(to)].filter(u => u && (self || u !== me.username));

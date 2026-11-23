@@ -1,0 +1,10 @@
+drop policy if exists ps_own on push_subs;
+drop policy if exists ps_read on push_subs;
+drop policy if exists ps_ins on push_subs;
+drop policy if exists ps_upd on push_subs;
+drop policy if exists ps_del on push_subs;
+create policy ps_read on push_subs for select using (user_id = auth.uid());
+create policy ps_ins on push_subs for insert with check (user_id = auth.uid() and username = my_username());
+create policy ps_upd on push_subs for update using (auth.uid() is not null) with check (user_id = auth.uid() and username = my_username());
+create policy ps_del on push_subs for delete using (user_id = auth.uid());
+select 'ok' as push_ready;

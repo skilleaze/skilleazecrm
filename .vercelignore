@@ -1,0 +1,9 @@
+# Not deployed to Vercel (source, tooling, notes, SQL). index.html is self-contained.
+/src
+/tools
+/preview
+/CLAUDE.md
+/README.md
+/supabase/*.sql
+/supabase/*.md
+/supabase/functions
