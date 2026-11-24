@@ -2,6 +2,32 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 24 Nov 2026, 21:25 IST · automatic check (window 18:23–21:23 IST)
+**Checked**: API errors, database errors, edge functions (no errors), logins (3 wrong passwords, ~5 slow `/auth/v1/user`
+timeouts incl. one 504 at 21:15 IST — noise), security advisors (unchanged), runbook data checks.
+**Found**
+- The same three refused-save loops are still running, ~9,000 refused requests in the window:
+  - **ishfa** 1,250 × PATCH PUT-1795513709056 ("Operations … cannot change order status", 18:30–21:22 IST, still going).
+  - **zahir** 1,331 × (patch_extra + order_experts) on KAPPA-1793962857180 / KAPPA-1794467721091 (18:58–19:33 IST, every ~2.5 s);
+    each round re-sends `wx = {linkedin: X, cv: X}` (X = SHIHAB / FATHIMATH.SHIREENA) — refused correctly, nothing changed.
+  - **MUNEEBA** 461 × (patch_extra + order_experts) on her 6 ALPHA orders (18:36–21:16 IST).
+  - **Why the earlier fixes did not reach them**: their requests show code from **before 23 Nov 18:10** (they still send
+    order_experts for an order whose save was just refused — the current build never does; checked with a node test of
+    `push`). zahir "opened" at 18:56 IST by signing in again in an old tab, not by reloading. The app's update check
+    (`version.txt`) skips the reload while a save is pending — and in a refused-save loop a save is always pending,
+    so these tabs can never update on their own.
+- Data checks clean except the known SAN-1794807224485 (CV = FATHIMA.HANA, inactive) and ALPHA-1795272437380 (CV = THOIBA).
+**Fixed** (app, build b1795535857202): `src/app.html` update check — if a new build is out and the save is still
+pending after 3 checks (~4 min), the app saves unsaved changes to the device outbox and reloads anyway (the outbox is
+restored and re-saved after the reload). Tests: unit test of the check (clean → reloads at once; stuck → reloads on the
+3rd check with the outbox saved), bundle check, preview as Ops manager / CV expert / Management (no script errors).
+This only helps from this build on — tabs already stuck on old code still need a manual reload.
+**Needs the owner**
+1. Ask **ishfa**, **zahir** and **MUNEEBA** to fully close every CRM tab/window (or the installed app) and open it
+   again. Signing out and in is not enough.
+2. Still open: SAN-1794807224485 expert; SQL 50 + ALPHA-1795272437380 re-set (03:25 entry); consultants reading all
+   enquiries via `app_kv.puttur` (15:25 entry).
+
 ## 24 Nov 2026, 18:25 IST · automatic check (window 15:23–18:23 IST)
 **Checked**: API errors, database errors, edge functions (none), logins (no failures), security advisors (unchanged),
 runbook data checks.
