@@ -124,13 +124,15 @@
   }
   // Realtime: every synced table (and any added to TBL later) pushes a change signal to all open portals.
   let SYNC_CH = null, SYNC_CB = null, SYNC_TRY = 0, SYNC_T = null;
-  function subscribeAll(cb) { SYNC_CB = cb; const c = sb(); if (SYNC_CH) { try { c.removeChannel(SYNC_CH); } catch (e) {} SYNC_CH = null; }
+  // Only the current channel may trigger a re-subscribe: removing the old one fires its "CLOSED" status, which used to start
+  // another re-subscribe (and a full refresh) every ~2.5 s forever after one network blip.
+  function subscribeAll(cb) { SYNC_CB = cb; const c = sb(); if (SYNC_CH) { const old = SYNC_CH; SYNC_CH = null; try { c.removeChannel(old); } catch (e) {} }
     const tables = [...new Set([...Object.values(TBL), 'order_experts', 'app_kv', 'expert_agents', 'profiles'])];
     let ch = c.channel('skz-sync-' + Math.random().toString(36).slice(2, 8));
     tables.forEach(t => { ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, p => { try { SYNC_CB && SYNC_CB(t, p); } catch (e) {} }); });
-    ch.subscribe(st => { if (st === 'SUBSCRIBED') { SYNC_TRY = 0; try { SYNC_CB && SYNC_CB('*', null); } catch (e) {} }
+    SYNC_CH = ch; ch.subscribe(st => { if (SYNC_CH !== ch) return; if (st === 'SUBSCRIBED') { SYNC_TRY = 0; try { SYNC_CB && SYNC_CB('*', null); } catch (e) {} }
       if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') { clearTimeout(SYNC_T); SYNC_TRY++; SYNC_T = setTimeout(() => { if (SYNC_CB) subscribeAll(SYNC_CB); }, Math.min(30000, 1500 * Math.pow(1.7, SYNC_TRY))); } });
-    SYNC_CH = ch; return () => { SYNC_CB = null; clearTimeout(SYNC_T); try { c.removeChannel(ch); } catch (e) {} }; }
+    SYNC_CH = ch; return () => { SYNC_CB = null; clearTimeout(SYNC_T); const cur = SYNC_CH; SYNC_CH = null; try { if (cur) c.removeChannel(cur); } catch (e) {} if (cur !== ch) try { c.removeChannel(ch); } catch (e) {} }; }
   function syncState() { return SYNC_CH ? SYNC_CH.state : 'none'; }
   function applyChanges(base, delta, onlyIds) {
     const d = { ...base }, localEnq = enqOf(base);

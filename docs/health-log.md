@@ -2,6 +2,33 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 25 Nov 2026, 00:25 IST · automatic check (window 21:20–00:25 IST)
+**Checked**: API errors, database errors, edge functions (no errors), logins (1 slow refresh-token 500 and 2 timeouts during the
+outage below — noise), security advisors (unchanged), runbook data checks.
+**Found**
+- **Database crashed and restarted at 22:34–22:36 IST** ("database system was not properly shut down; automatic recovery").
+  About 2 minutes of 520/521/522 errors for everyone signed in. Before it: statement timeouts from 21:33 IST and 11-second
+  `app_kv` writes/reads. Load at the time was ~38,000 requests per 15 min, driven by **ishfa's refused-save loop**: ~13 uploads a
+  minute of the ~0.9 MB `app_kv.puttur`, and each upload made every open app (16–20 people) download it again. After the
+  restart ishfa's loop stopped (last refusal 23:53 IST) and traffic fell to ~2,000–8,000 per 15 min.
+- **MUNEEBA**'s loop ran until 00:01 IST (162 × patch_extra + order_experts, same 6 ALPHA orders); no refusals since — her app now
+  looks updated. **zahir**: 2 refusals at 22:37 IST only.
+- **New: realtime re-subscribe loop in every app** (root cause of the high background traffic). After any single realtime drop
+  (network blip, the DB restart), `subscribeAll` in `supabase/live.js` removed the old channel; supabase-js then reported that old
+  channel as "CLOSED", which started another re-subscribe ~2.5 s later, and so on forever — each round a full refresh (9 queries).
+  Seen in the logs: zahir 426 refreshes 22:37–23:40 IST with nobody else saving; user ed3f49e5 489 refreshes in 25 min after
+  00:00 IST. Reproduced in a node test against the vendored supabase-js behaviour: one blip → 234 re-subscribes in 10 min.
+- Data checks clean except the known SAN-1794807224485 (CV = FATHIMA.HANA, inactive).
+**Fixed** (app, build b1795546604647): `supabase/live.js` `subscribeAll` — only the current channel may trigger a re-subscribe
+(old channels' CLOSED is ignored); the unsubscribe also closes the newest channel. Tests: node simulation (old: 234 re-subscribes /
+10 min after one blip; new: 2), repeated blips still reconnect once each, bundle check, live bundle loads with no script errors,
+preview as Management / Head of ops / Ops manager / Sales agent / CV expert / LinkedIn expert (no script errors).
+**Needs the owner**
+1. The database restart (22:34 IST) was an overload, most likely memory on the current compute size. With the loops gone and this
+   fix live, load should stay far lower; if it happens again, consider a bigger Supabase compute add-on (billing decision).
+2. Still open: SAN-1794807224485 expert; SQL 50 + ALPHA-1795272437380 re-set (03:25 entry); consultants reading all enquiries via
+   `app_kv.puttur` (15:25 entry); the 0.9 MB `app_kv.puttur` being re-downloaded by every app on each Puttur save (design item).
+
 ## 24 Nov 2026, 21:25 IST · automatic check (window 18:23–21:23 IST)
 **Checked**: API errors, database errors, edge functions (no errors), logins (3 wrong passwords, ~5 slow `/auth/v1/user`
 timeouts incl. one 504 at 21:15 IST — noise), security advisors (unchanged), runbook data checks.
