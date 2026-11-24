@@ -2,6 +2,29 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 24 Nov 2026, 15:25 IST · automatic check (window 12:23–15:23 IST)
+**Checked**: API errors, database errors, edge functions (none), logins (2 wrong passwords, noise), security advisors
+(same long-standing warnings; new `login_hr_key` from SQL 51 joins the existing SECURITY DEFINER list), runbook data checks.
+**Found**
+- **New: Puttur consultants re-sending other consultants' enquiries.** 189 refusals on `enquiries` ("violates row-level
+  security policy (USING expression)"): nilufar 172 (14:23–14:28 IST, looping on nuha's ENQ-1795506716674),
+  arifa 12, nuha 3, faiza 2 (all on nilufar's new ENQ-1795512176409, seconds after she created it).
+  Root cause: every consultant's app also holds all enquiries through `app_kv.puttur` (2,365 copies), so a foreign
+  enquiry can show up as "new" in a save and is upserted; RLS refuses it (correctly). The self-heal from 49 did not
+  stop the loop for enquiries because it looked for them in `data.enq` instead of `data.puttur.enquiries`.
+  No data was lost or changed. Not a business-rule issue.
+- Other refusals low: almisha 10 (ETA-1793816841104, one round 12:56 IST), ishfa 4 (orders, one click).
+- Data checks clean except the known SAN-1794807224485 (CV = FATHIMA.HANA) and ALPHA-1795272437380 (CV = THOIBA).
+**Fixed** (app, build b1795514124392):
+- `supabase/live.js` push: a consultant's save only ever sends enquiries whose consultant is that login (`staff_id`).
+- `src/app.html` livePush heal: refused enquiries are now put back in `puttur.enquiries`, so any refusal stops after one round.
+  Tested: node test of push as cse (only own enquiry sent) and manager (unchanged), heal unit test, preview as Consultant and
+  Puttur manager (no script errors).
+**Needs the owner**
+1. Consultants can read every enquiry (names/phones) through `app_kv.puttur`, although the `enquiries` table limits them
+   to their own. Decide whether that is wanted; narrowing it is a who-sees-what change, so it was not made.
+2. Still open: SAN-1794807224485 expert; SQL 50 + ALPHA-1795272437380 re-set (see 03:25 entry).
+
 ## 24 Nov 2026, 12:25 IST · automatic check (window 09:20–12:23 IST)
 Quiet: 16 refusals in 2 single rounds (MUNEEBA 10:26 IST, haseena 10:58 IST; 403/42501 + one "Experts can only update work status"), no 5xx, no new database or edge-function errors, logins normal, advisors unchanged.
 Data checks clean except the known SAN-1794807224485 (CV = FATHIMA.HANA) and ALPHA-1795272437380 (CV = THOIBA). SQL 50 test not retried (tool needs an approval). Nothing changed; owner items from 03:25 still open.

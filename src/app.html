@@ -3138,7 +3138,7 @@ class Base extends DCLogic {
       if (!errs.length) { this._lastPushed = next; this._pushFails = 0; this.liveCache(); this.outboxClear(); this.setState({ liveSaving: false, liveUnsaved: 0 }); setTimeout(() => this.liveRefresh(true), 400); }
       else if (errs.denied && errs.denied.length) { // refused for good (permission / rule): undo just those records, keep everything else
         const den = errs.denied, bad = new Set(den.map(x => x.k + '|' + x.id)), keys = [...new Set(den.map(x => x.k))];
-        const heal = d => { const o = { ...d }; keys.forEach(k => { const was = new Map(((prev && prev[k]) || []).map(r => [r.id, r])); o[k] = (d[k] || []).filter(r => !bad.has(k + '|' + r.id) || was.has(r.id)).map(r => bad.has(k + '|' + r.id) ? was.get(r.id) : r); }); return o; };
+        const heal = d => { const o = { ...d }; keys.forEach(k => { const get = x => k === 'enq' ? ((x && x.puttur && x.puttur.enquiries) || []) : ((x && x[k]) || []); const was = new Map(get(prev).map(r => [r.id, r])); const list = get(d).filter(r => !bad.has(k + '|' + r.id) || was.has(r.id)).map(r => bad.has(k + '|' + r.id) ? was.get(r.id) : r); if (k === 'enq') o.puttur = { ...(d.puttur || {}), enquiries: list }; else o[k] = list; }); return o; };
         const nm = (den.find(x => x.k === 'orders' && (next.orders || []).some(r => r.id === x.id)) || den[0]), rec = ((next[nm.k] || []).find(r => r.id === nm.id) || {});
         this.setState(s => ({ liveSaving: false, data: heal(s.data) }), () => { this.outboxSave(prev, this.state.data); this.outboxDrop(den); this.setState({ liveUnsaved: this.outboxCount() }); this.liveCache(); clearTimeout(this._retryT); this._retryT = setTimeout(() => this.livePush(), 1500); });
         this.toast('Not allowed for your login: ' + den.length + ' change' + (den.length > 1 ? 's' : '') + (rec.name ? ' (e.g. ' + rec.name + ')' : '') + ' — showing the saved version again. Ask operations if it should change.'); }
@@ -6680,7 +6680,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795511452536';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795514124392';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data); this.livePush(); return; } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
       this._verT = setInterval(chk, 120000); setTimeout(chk, 15000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chk(); }); }
     this._authX = () => { if (!this.state.user) return; try { localStorage.removeItem(SESSION); } catch (e) {} this.setState({ user: null, liveProfile: null, loginErr: 'Your sign-in expired. Please sign in again.' }); };

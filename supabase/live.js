@@ -161,6 +161,8 @@
     const rls = e => /row-level security|42501/i.test(String((e && (e.message || e.code)) || ''));
     const one = async (k, x) => { const row = ROW[k](x); try { await c.from(TBL[k]).upsert([row], { onConflict: 'id' }).then(chk); } catch (e1) { if (!rls(e1)) { failed.add(x.id); deny(k, x.id, e1); throw e1; } const { id, ...rest } = row; const u = await c.from(TBL[k]).update(rest).eq('id', x.id).select('id'); if (u.error || !(u.data || []).length) { failed.add(x.id); deny(k, x.id, u.error || e1); throw u.error || e1; } } };
     prev = prev || {}; prev = { ...prev, enq: enqOf(prev) }; next = { ...next, enq: enqOf(next) };
+    // Consultants only ever save their own enquiries; others' (copied in via app_kv.puttur) are read-only to them and were re-sent in a loop.
+    if (ME && ME.role === 'cse') { const own = e => e && String(e.bde || e.cse || '') === String(ME.staff_id || ''); prev.enq = prev.enq.filter(own); next.enq = next.enq.filter(own); }
     for (const k of Object.keys(TBL)) {
       const a = prev[k] || [], b = next[k] || []; if (a === b) continue;
       const pm = new Map(a.map(x => [x.id, x])), left = new Map(pm), added = [], changed = [];
