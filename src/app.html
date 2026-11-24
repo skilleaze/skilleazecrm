@@ -3125,7 +3125,10 @@ class Base extends DCLogic {
     if (this._refBusy || this._pushing) { this._refAgain = true; clearTimeout(this._refRetry); this._refRetry = setTimeout(() => { if (this._refAgain) { this._refAgain = false; this.liveRefresh(true); } }, 1200); return; }
     if (!force && typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
     this._refBusy = true; const since = this._liveSyncedAt;
-    L.loadDelta(since).then(delta => { this._refBusy = false; if (!delta || !delta.n) { this._liveSyncedAt = delta ? delta.syncedAt : since; return; }
+    L.loadDelta(since).then(delta => { this._refBusy = false;
+      // A save started while this was loading: applying now would let that save's success overwrite these server changes in _lastPushed (stale copies then looked like local edits and were re-sent forever). Drop it and load again after the save.
+      if (this._pushing) { this._refAgain = true; clearTimeout(this._refRetry); this._refRetry = setTimeout(() => { if (this._refAgain) { this._refAgain = false; this.liveRefresh(true); } }, 1200); return; }
+      if (!delta || !delta.n) { this._liveSyncedAt = delta ? delta.syncedAt : since; return; }
       const drop = d0 => { if (!delta.del) return d0; const o2 = { ...d0 }; Object.entries(delta.del).forEach(([k, ids]) => { const S = new Set(ids); if (Array.isArray(o2[k])) o2[k] = o2[k].filter(x => !S.has(String(x.id))); }); return o2; };
       // Orders edited on this device but not saved yet must survive the incoming server copy (it would put back the old status).
       const cur = this.state.data, lpm = new Map(((this._lastPushed && this._lastPushed.orders) || []).map(o => [o.id, o])), dirty = new Map(this._lastPushed && this._lastPushed !== cur ? (cur.orders || []).filter(o => lpm.get(o.id) !== o).map(o => [o.id, o]) : []);
@@ -6680,7 +6683,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795514124392';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795525263757';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data); this.livePush(); return; } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
       this._verT = setInterval(chk, 120000); setTimeout(chk, 15000); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') chk(); }); }
     this._authX = () => { if (!this.state.user) return; try { localStorage.removeItem(SESSION); } catch (e) {} this.setState({ user: null, liveProfile: null, loginErr: 'Your sign-in expired. Please sign in again.' }); };

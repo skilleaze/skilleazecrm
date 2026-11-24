@@ -2,6 +2,36 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 24 Nov 2026, 18:25 IST · automatic check (window 15:23–18:23 IST)
+**Checked**: API errors, database errors, edge functions (none), logins (no failures), security advisors (unchanged),
+runbook data checks.
+**Found**
+- **ishfa (Ops manager): 672 refused saves** on PUT-1795513709056 (16:48–18:16 IST), each `{"status":"CV SUBMITTED"}` →
+  "Operations can assign experts but cannot change order status or money" (the guard was right; nothing was changed).
+  RILWANA closed that order at 16:48:37 IST; ishfa's app kept sending its older status back. Each round also re-uploaded
+  the ~0.9 MB `app_kv.puttur` (≈700 times), which makes every open app download it again.
+  **Root cause** (reproduced in a node test of `liveRefresh`/`livePush`): when a refresh finished while a save was in
+  flight, the save's success then set `_lastPushed` back to the pre-refresh copy, so the server's newer values looked
+  like local edits and were re-sent on every refresh; this refusal text was also not recognised as "refused for good",
+  so the self-heal never ran.
+- **MUNEEBA: 486 + 484 refusals** (patch_extra + order_experts, 6 ALPHA orders, bursts 17:08–18:20 IST) — the same loop
+  as in the 00:35 entry, running since at least 23 Nov 18:30 IST (~3,200 more overnight; earlier entries under-counted it).
+  Request sizes show she re-sends old server values (e.g. ALPHA-1795272437380 CV = THOIBA), which matches the same
+  stale-copy race. Desktop Safari (Mac).
+- almisha 2 refusals (ETA-1793816841104, one round). faiza 7 × 401 at 17:52 IST (expired session, noise).
+- Data checks clean except the known SAN-1794807224485 (CV = FATHIMA.HANA) and ALPHA-1795272437380 (CV = THOIBA).
+**Fixed** (app, build b1795525263757):
+- `src/app.html` liveRefresh: a refresh that returns while a save is running is dropped and re-loaded after the save
+  (sync point not advanced, nothing lost), so a save can no longer overwrite newer server values in `_lastPushed`.
+  Test: race simulation — old build re-sent the server's own change, new build sends only the real edit.
+- `supabase/live.js` push: "cannot change…", "cannot be moved back", "Only the Head…", "Only HR…", "not from one of your
+  agents" now count as refused for good → the app shows the saved version once and stops retrying.
+  Tested: regex unit check, bundle check, preview as Ops manager / CV expert / Management (no script errors).
+**Needs the owner**
+1. Ask **ishfa** and **MUNEEBA** to fully close the CRM and open it again (or accept the update prompt) so they get the new build.
+2. Still open: SAN-1794807224485 expert; SQL 50 + ALPHA-1795272437380 re-set (see 03:25 entry); consultants reading all
+   enquiries via `app_kv.puttur` (15:25 entry).
+
 ## 24 Nov 2026, 15:25 IST · automatic check (window 12:23–15:23 IST)
 **Checked**: API errors, database errors, edge functions (none), logins (2 wrong passwords, noise), security advisors
 (same long-standing warnings; new `login_hr_key` from SQL 51 joins the existing SECURITY DEFINER list), runbook data checks.

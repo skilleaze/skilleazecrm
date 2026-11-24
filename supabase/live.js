@@ -156,7 +156,7 @@
     if (!(await haveSession())) return [signedOut().message];
     const c = sb(), jobs = [], errs = [], failed = new Set(), denied = [];
     // Refusals that can never succeed on a retry (permission / business rule), as opposed to network trouble.
-    const isDenied = e => /row-level security|42501|not open to your login|Experts can only|cannot be changed|read-only|Only management|Only the assigned/i.test(String((e && (e.message || e.code || e.details)) || e || ''));
+    const isDenied = e => /row-level security|42501|not open to your login|Experts can only|cannot be changed|cannot change|cannot be moved back|read-only|Only management|Only the assigned|Only the Head|Only HR|not from one of your agents/i.test(String((e && (e.message || e.code || e.details)) || e || ''));
     const deny = (k, id, e) => { if (isDenied(e) && !denied.some(d => d.k === k && d.id === id)) denied.push({ k, id }); };
     const rls = e => /row-level security|42501/i.test(String((e && (e.message || e.code)) || ''));
     const one = async (k, x) => { const row = ROW[k](x); try { await c.from(TBL[k]).upsert([row], { onConflict: 'id' }).then(chk); } catch (e1) { if (!rls(e1)) { failed.add(x.id); deny(k, x.id, e1); throw e1; } const { id, ...rest } = row; const u = await c.from(TBL[k]).update(rest).eq('id', x.id).select('id'); if (u.error || !(u.data || []).length) { failed.add(x.id); deny(k, x.id, u.error || e1); throw u.error || e1; } } };
