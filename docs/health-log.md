@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 25 Nov 2026, 03:25 IST · automatic check (window 00:23–03:23 IST)
+Healthy: no 5xx, no database/edge-function errors, logins fine, advisors unchanged, data checks clean except the known SAN-1794807224485; traffic down to ~5,300 requests in 3 h after the 00:25 realtime fix; only small refusal bursts (almisha 16 rounds 00:36–00:48 IST, MUNEEBA 1 round 02:19 IST) — below threshold, no fix needed. Live version.txt not reachable from the sandbox (proxy).
+
 ## 25 Nov 2026, 00:25 IST · automatic check (window 21:20–00:25 IST)
 **Checked**: API errors, database errors, edge functions (no errors), logins (1 slow refresh-token 500 and 2 timeouts during the
 outage below — noise), security advisors (unchanged), runbook data checks.
