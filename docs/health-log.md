@@ -2,6 +2,10 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 24 Nov 2026, 12:25 IST · automatic check (window 09:20–12:23 IST)
+Quiet: 16 refusals in 2 single rounds (MUNEEBA 10:26 IST, haseena 10:58 IST; 403/42501 + one "Experts can only update work status"), no 5xx, no new database or edge-function errors, logins normal, advisors unchanged.
+Data checks clean except the known SAN-1794807224485 (CV = FATHIMA.HANA) and ALPHA-1795272437380 (CV = THOIBA). SQL 50 test not retried (tool needs an approval). Nothing changed; owner items from 03:25 still open.
+
 ## 24 Nov 2026, 09:25 IST · automatic check (window 06:22–09:22 IST)
 Quiet: 6 refusals (MUNEEBA, 07:24 IST, one round, 403/42501), no 5xx, no new database or edge-function errors, logins normal,
 advisors unchanged. Data checks clean except the known SAN-1794807224485 (CV = FATHIMA.HANA) and ALPHA-1795272437380 (CV = THOIBA).
