@@ -3,7 +3,7 @@
  function cut(){ try { if (window.SKZLive) { window.SKZLive.on = function(){ return false; }; window.SKZLive.sb = function(){ throw new Error('Preview: not connected'); }; } } catch(e){} }
  cut(); setInterval(cut, 300);
  try{localStorage.setItem('skz-alerts-nudge',String(Date.now()+864e9));}catch(e){}
- var R=[['muneez','Management'],['dhiya','Head of ops'],['ishfa','Ops manager'],['alpha','Sales agent'],['shafeeda','CV expert'],['akshara','LinkedIn expert'],['muhammed.munavvir','Puttur manager']];
+ var R=[['muneez','Management'],['dhiya','Head of ops'],['ishfa','Ops manager'],['alpha','Sales agent'],['shafeeda','CV expert'],['akshara','LinkedIn expert'],['muhammed.munavvir','Puttur manager'],['aisha.rahman','Consultant']];
  function btn(t){return [...document.querySelectorAll('button')].find(b=>b.innerText.trim()===t);}
  function setV(el,v){var p=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;p.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));}
  function fill(u){var ins=[...document.querySelectorAll('input')].filter(i=>i.type==='text'||i.type==='password'||!i.type);var pw=document.querySelector('input[type=password]');if(!pw)return false;var us=ins.find(i=>i!==pw);setV(us,u);setV(pw,'skilleaze');setTimeout(function(){var b=btn('Sign in');if(b)b.click();},80);return true;}

@@ -26,6 +26,7 @@ def rep(a, b):
     s = s.replace(a, b)
 
 rep('const LIVE_MODE = true;', 'const LIVE_MODE = false;')
+rep('componentDidMount() { if (LIVE_MODE) this.waitLive(0);', 'componentDidMount() { window.__skzApp = this; window.__skzNAV = NAV; window.__skzIC = IC; window.__skzSHORT = SHORT; if (LIVE_MODE) this.waitLive(0);')
 rep("function loadReal() { return Promise.reject(new Error('The live database is empty. Upload the data from the internal copy first.')); }",
     open(os.path.join(ROOT, 'tools', 'preview', 'sample-data.js'), encoding='utf-8').read().rstrip())
 rep("forcePw: own ? null : { u, a: '', b: '', err: '' }", 'forcePw: null')
