@@ -2,6 +2,11 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 24 Nov 2026, 09:25 IST · automatic check (window 06:22–09:22 IST)
+Quiet: 6 refusals (MUNEEBA, 07:24 IST, one round, 403/42501), no 5xx, no new database or edge-function errors, logins normal,
+advisors unchanged. Data checks clean except the known SAN-1794807224485 (CV = FATHIMA.HANA) and ALPHA-1795272437380 (CV = THOIBA).
+SQL 50 rollback test sent again; the SQL tool again waited for an approval, so it did not run. Nothing changed; owner items from 03:25 still open.
+
 ## 24 Nov 2026, 06:25 IST · automatic check (window 03:22–06:22 IST)
 Quiet: 11 refusals (MUNEEBA, 04:45–05:01 IST, 403/42501, stopped), no 5xx, no database/edge-function errors, logins
 normal, advisors unchanged; data checks clean except the two known items (SAN-1794807224485 CV = FATHIMA.HANA;
