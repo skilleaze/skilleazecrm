@@ -2,6 +2,28 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 25 Nov 2026, 12:25 IST · automatic check (window 09:23–12:23 IST)
+**Checked**: API errors, database errors, edge functions (no errors), logins (no failures), security advisors (unchanged: 4 mutable
+search_path, SECURITY DEFINER callable lints). Runbook data checks **not run** again: the first write-test SQL triggered the
+Supabase approval prompt, which timed out (read-only queries before it worked).
+**Found** (no 5xx, no new database error messages)
+- **Both stale-tab refusal loops are still running and MUNEEBA's got much heavier.**
+  - MUNEEBA (expert): 1,330 × `order_experts` RLS refusals + 1,326 × `patch_extra` "not open to your login" on the same 6 ALPHA orders
+    (+ ETA-1793816841104) from 09:55 IST, ~60 a minute since 12:00 IST, each round followed by a full refresh (9 queries).
+    She sends `order_experts` even after `patch_extra` fails — only builds before 49 do that, so this is an old tab, not a bug in
+    the current app.
+  - ishfa (ops): 383 × PATCH orders "Operations … cannot change order status or money" (PUT-1795513709056), each with a re-upload
+    of the ~0.9 MB `app_kv.puttur`; burst again from 12:00 IST. Two `app_kv` upserts took **10.2–10.6 s** in the last 25 min — the
+    same strain that preceded last night's 22:34 IST crash.
+- almisha: 10 refused rounds (12:12–12:22 IST), below threshold.
+**Fixed**: nothing. `docs/pending-sql/52_kv_skip_same.sql` is still the right mitigation for the puttur re-uploads, but its required
+`begin … rollback` test as ishfa could not run (approval timed out), so per the runbook it was not applied.
+**Needs the owner (urgent)**
+1. Ask **MUNEEBA** and **ishfa** to close every CRM tab/window (all browsers/devices) and open admin.skilleaze.com fresh.
+2. Run `docs/pending-sql/52_kv_skip_same.sql` in the SQL Editor (or allow the Supabase connector's SQL without a prompt for this task).
+3. Still open from 09:25: ~7 GB `activity_log`; SAN-1794807224485 expert; SQL 50 + ALPHA-1795272437380; consultants reading all
+   enquiries via `app_kv.puttur`; database compute size.
+
 ## 25 Nov 2026, 09:25 IST · automatic check (window 06:23–09:23 IST)
 **Checked**: API errors, database errors, edge functions (no errors), logins (1 wrong refresh token, a few slow `/auth/v1/user` — noise),
 security advisors (unchanged: 4 mutable search_path, SECURITY DEFINER callable lints). The runbook data checks were **not run**:
