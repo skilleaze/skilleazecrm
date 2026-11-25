@@ -2,6 +2,32 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 25 Nov 2026, 09:25 IST · automatic check (window 06:23–09:23 IST)
+**Checked**: API errors, database errors, edge functions (no errors), logins (1 wrong refresh token, a few slow `/auth/v1/user` — noise),
+security advisors (unchanged: 4 mutable search_path, SECURITY DEFINER callable lints). The runbook data checks were **not run**:
+the Supabase SQL tool started asking for an approval nobody was there to give, so this run stopped using it.
+**Found**
+- **ishfa's stale-tab loop is back and heavy** (Mac browser tab on a build from before 24 Nov 21:25 IST — it cannot update itself):
+  295 × PATCH PUT-1795513709056 refused ("Operations … cannot change order status or money") from 07:09 IST, ~11 a minute since
+  09:00 IST and still going. Every round also re-uploads the ~0.9 MB `app_kv.puttur` (316 uploads in 25 min) — the same pattern
+  that crashed the database at 22:34 IST last night. Nothing is changed by it (the guard refuses correctly).
+- **New: `activity_log` is ~7.1 GB of the 7.3 GB database.** `log_change` writes the full old + new `app_kv` row on every save;
+  348 of the last 356 `puttur` saves were the identical value (151 MB of audit copies in 3 h). This is what fills the disk.
+- MUNEEBA: 36 refused rounds on her 6 ALPHA orders (07:59–09:14 IST), below threshold; same stale-build loop as before.
+- 1 database error "column h.owner does not exist" at 06:23 IST was this health check's own data-check query (noise).
+**Prepared, not applied**: `docs/pending-sql/52_kv_skip_same.sql` — a last-running BEFORE UPDATE trigger on `app_kv` that skips
+a save whose value is unchanged (no new row version, no audit copy, no realtime event; the save still returns OK; real changes
+are saved and logged as before). The required `begin … rollback` test as ishfa could not run (approval prompt timed out), so per
+the runbook it was not applied.
+**Needs the owner (urgent)**
+1. Ask **ishfa** to close every CRM tab/window on her Mac and open admin.skilleaze.com again (signing out is not enough).
+   MUNEEBA the same.
+2. Review and run `docs/pending-sql/52_kv_skip_same.sql` in the SQL Editor (or approve it on the next run).
+3. Decide what to do with the ~7 GB `activity_log` (mostly identical `app_kv.puttur` copies) — e.g. archive/delete old
+   `table_name='app_kv'` rows where `old_data->'value' = new_data->'value'`. Not done automatically: it is audit data.
+4. Still open: SAN-1794807224485 expert; SQL 50 + ALPHA-1795272437380 re-set; consultants reading all enquiries via
+   `app_kv.puttur`; database compute size.
+
 ## 25 Nov 2026, 06:25 IST · automatic check (window 03:23–06:23 IST)
 Healthy: no 5xx, no database/edge-function errors, logins fine, advisors unchanged, data checks clean except the known SAN-1794807224485; night traffic (~440 requests); only small refusal bursts (MUNEEBA 3 rounds at 03:28 and 06:12 IST, ishfa 12 × PUT-1795513709056 05:13–05:17 IST) — below threshold. Live version.txt not reachable from the sandbox (proxy).
 
