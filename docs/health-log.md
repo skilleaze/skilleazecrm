@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 25 Nov 2026, 06:25 IST · automatic check (window 03:23–06:23 IST)
+Healthy: no 5xx, no database/edge-function errors, logins fine, advisors unchanged, data checks clean except the known SAN-1794807224485; night traffic (~440 requests); only small refusal bursts (MUNEEBA 3 rounds at 03:28 and 06:12 IST, ishfa 12 × PUT-1795513709056 05:13–05:17 IST) — below threshold. Live version.txt not reachable from the sandbox (proxy).
+
 ## 25 Nov 2026, 03:25 IST · automatic check (window 00:23–03:23 IST)
 Healthy: no 5xx, no database/edge-function errors, logins fine, advisors unchanged, data checks clean except the known SAN-1794807224485; traffic down to ~5,300 requests in 3 h after the 00:25 realtime fix; only small refusal bursts (almisha 16 rounds 00:36–00:48 IST, MUNEEBA 1 round 02:19 IST) — below threshold, no fix needed. Live version.txt not reachable from the sandbox (proxy).
 
