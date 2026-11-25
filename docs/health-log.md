@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 26 Nov 2026, 03:25 IST · automatic check (window 00:22–03:22 IST)
+Healthy: no 5xx in ~2.7k requests (quiet night), no database/edge-function/login errors, advisors unchanged; only 4 × `order_experts` + 4 × `patch_extra` 403s for the same expert as 00:25 (below threshold); data checks clean except the known SAN-1794807224485 (open order on inactive expert FATHIMA.HANA). Owner items from 12:25 (activity_log size, SQL 50/52, SAN expert, etc.) still open.
+
 ## 26 Nov 2026, 00:25 IST · automatic check (window 21:22–00:22 IST)
 Healthy: no 5xx in ~30.4k requests, no database/edge-function/login errors, advisors unchanged; only 4 × `order_experts` + 4 × `patch_extra` 403s for one expert (below threshold); data checks clean except the known SAN-1794807224485 (open order on inactive expert FATHIMA.HANA) and Munavvir's manager-entered punch for Arifa (correct). Live version.txt not reachable from the sandbox (proxy). Owner items from 12:25 (activity_log size, SQL 50/52, SAN expert, etc.) still open.
 
