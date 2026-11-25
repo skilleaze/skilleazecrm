@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 25 Nov 2026, 15:25 IST · automatic check (window 12:23–15:23 IST)
+Healthy: no 5xx, no database/edge-function errors, logins fine, advisors unchanged; both stale-tab loops have **stopped** (MUNEEBA last refusal 12:27 IST, almisha 12:31 IST, ishfa 12:55 IST — tabs evidently reopened), traffic back to ~6–7k requests per 30 min, slowest response 0.8 s in the last half hour; data checks clean except the known SAN-1794807224485 (1 manager-entered punch fix for arifa under her own key — correct). SQL 52 not applied (no longer urgent). Live version.txt not reachable from the sandbox (proxy). Owner items from 12:25 (activity_log size, SQL 50/52, SAN expert, etc.) still open.
+
 ## 25 Nov 2026, 12:25 IST · automatic check (window 09:23–12:23 IST)
 **Checked**: API errors, database errors, edge functions (no errors), logins (no failures), security advisors (unchanged: 4 mutable
 search_path, SECURITY DEFINER callable lints). Runbook data checks **not run** again: the first write-test SQL triggered the
