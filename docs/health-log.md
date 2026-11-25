@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 25 Nov 2026, 21:25 IST · automatic check (window 18:22–21:22 IST)
+Healthy: no 5xx in ~22.3k requests, no database/edge-function errors (1 enum error was this check's own query), logins fine (1 × 401 app_kv save — noise), advisors unchanged; almisha had 27 stale-tab refusal rounds (20:20–20:25 IST, below threshold, stopped); data checks clean except the known SAN-1794807224485 (open order on inactive expert FATHIMA.HANA). Owner items from 12:25 (activity_log size, SQL 50/52, SAN expert, etc.) still open.
+
 ## 25 Nov 2026, 18:25 IST · automatic check (window 15:22–18:22 IST)
 Healthy: no 5xx, no database/edge-function errors (1 expected "Balance not received yet" refusal), logins fine (2 wrong passwords, 1 stale refresh token — noise), advisors unchanged; no stale-tab refusal loops (only 4 × 4xx in ~48.7k requests); data checks clean except the known SAN-1794807224485 (open order still on inactive expert FATHIMA.HANA). Live version.txt not reachable from the sandbox (proxy). Owner items from 12:25 (activity_log size, SQL 50/52, SAN expert, etc.) still open.
 
