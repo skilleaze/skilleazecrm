@@ -150,12 +150,21 @@
 
   // A login whose session is gone keeps "working" as an anonymous visitor: the screen shows cached orders
   // but every save is refused. Check first and send the person back to Sign in (unsaved changes stay on the device).
-  async function haveSession() { try { const r = await sb().auth.getSession(); return !!(r && r.data && r.data.session); } catch (e) { return true; } }
+  async function haveSession() { try { const r = await sb().auth.getSession(); const s = r && r.data && r.data.session; if (s && s.user && ME && ME.id && s.user.id !== ME.id) { userSwitched(s); return 'other'; } return !!s; } catch (e) { return true; } }
+  // Sessions are shared by every tab of this browser. When another tab signs in as a different login, this tab must not
+  // send its own (e.g. an agent's) changes under that login: they were refused and dropped. Keep them on the device
+  // (outbox of this login) and reload this tab as the login that is now signed in.
+  let SWITCHED = false;
+  function userSwitched(s) { if (SWITCHED) return; SWITCHED = true; const was = (ME && ME.username) || 'your login', now = ((s && s.user && s.user.email) || '').split('@')[0] || 'another login';
+    setTimeout(() => { try { window.alert('This tab was signed in as ' + was + ', but another tab has now signed in as ' + now + '.\n\nChanges not yet saved for ' + was + ' are kept on this device and will save when ' + was + ' signs in again.\n\nThis tab will now reload as ' + now + '.'); } catch (e) {} location.reload(); }, 1500); }
+  const SWITCH_MSG = 'Another tab signed in as a different login. Not sent; kept on this device.';
+  let watching = false;
+  function watchUser() { if (watching) return; watching = true; try { sb().auth.onAuthStateChange((ev, s) => { if (s && s.user && ME && ME.id && s.user.id !== ME.id) userSwitched(s); }); } catch (e) {} }
   function signedOut() { try { window.dispatchEvent(new CustomEvent('skz-auth-expired')); } catch (e) {} return new Error('Your sign-in expired. Please sign in again.'); }
 
   // Save every change since `prev`. Returns a list of error messages.
   async function push(prev, next, getExpert, isMgmt, progress) {
-    if (!(await haveSession())) return [signedOut().message];
+    const hs = await haveSession(); if (hs === 'other') return [SWITCH_MSG]; if (!hs) return [signedOut().message];
     const c = sb(), jobs = [], errs = [], failed = new Set(), denied = [];
     // Refusals that can never succeed on a retry (permission / business rule), as opposed to network trouble.
     const isDenied = e => /row-level security|42501|not open to your login|Experts can only|cannot be changed|cannot change|cannot be moved back|read-only|Only management|Only the assigned|Only the Head|Only HR|not from one of your agents/i.test(String((e && (e.message || e.code || e.details)) || e || ''));
@@ -248,9 +257,9 @@ const patchJob = (k, o, x) => async () => { const ra = ROW[k](o), rb = ROW[k](x)
     let user = null; for (let t = 0; t < 3 && !user; t++) { try { const r = await sb().auth.getUser(); user = r && r.data && r.data.user; } catch (e) {} if (!user && known) { user = known; break; } if (!user) await pause(500 * (t + 1)); }
     if (!user) return null;
     const p = await sb().from('profiles').select('*').eq('id', user.id).maybeSingle().then(chk);
-    const out = p ? { ...p, email: user.email } : { id: user.id, username: user.email.split('@')[0], role: null, active: false }; ME = out; return out;
+    const out = p ? { ...p, email: user.email } : { id: user.id, username: user.email.split('@')[0], role: null, active: false }; ME = out; watchUser(); return out;
   }
-  async function signIn(u, p) { const r = await sb().auth.signInWithPassword({ email: email(u), password: p }); if (r.error) throw r.error; return profile(); }
+  async function signIn(u, p) { ME = null; const r = await sb().auth.signInWithPassword({ email: email(u), password: p }); if (r.error) throw r.error; return profile(); }
   async function session() {
     for (let t = 0; t < 3; t++) {
       let s = null; try { const r = await sb().auth.getSession(); s = r && r.data && r.data.session; } catch (e) {}
@@ -377,7 +386,7 @@ const patchJob = (k, o, x) => async () => { const ra = ROW[k](o), rb = ROW[k](x)
   // Expert work status: one server-side, locked, all-or-nothing change. Resolves with the saved order, or throws.
   async function setTaskStatus(id, status, task, types) {
     const args = { p_id: String(id), p_status: status, p_task: task || null, p_types: types && types.length > 1 ? types : null };
-    if (!(await haveSession())) throw signedOut();
+    const hs = await haveSession(); if (hs === 'other') throw new Error(SWITCH_MSG); if (!hs) throw signedOut();
     let r = await sb().rpc('set_task_status', args);
     if (r.error && isAuthErr(r.error) && await fixAuth()) r = await sb().rpc('set_task_status', args);
     if (r.error) throw r.error;

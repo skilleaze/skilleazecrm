@@ -2,6 +2,24 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 26 Nov 2026, 15:25 IST · automatic check (window 12:22–15:22 IST)
+**Checked**: API errors (~56.8k requests, no 5xx), database errors, edge functions (no errors), logins (4 wrong passwords from a
+`localhost:3000` page + 1 stale refresh token — noise), security advisors (unchanged), runbook data checks (clean except the known
+SAN-1794807224485 on inactive expert FATHIMA.HANA). Live version.txt not checked (proxy).
+**Found**: one Mac Chrome is used for both **wau** (agent) and **fathimath.ishfana** (expert). With a WAU tab still open, the other tab
+signed in as the expert (14:37 IST); the browser shares one sign-in across tabs, so the WAU tab then sent its saves under the
+expert's login. The database refused them correctly (6 × transfers RLS, 2 × orders RLS), and the app's refused-save self-heal then
+**dropped them**: 3 WAU transfers (t1795684868767 at 14:51, t1795686515614 and t1795686537226 at 15:18 IST) and order
+WAU-1795686690625 (15:21) were never saved. WAU re-entered one order (WAU-1795686804188, musthafa, ₹490) after signing back in;
+**no WAU transfer exists after 24 Nov**. Also 3 × `set_task_status` refusals for wau at 14:37 (WAU tab trying expert work — same cause).
+**Fixed** (`supabase/live.js`, build b1795686958224): every save / work-status change first checks that the browser's current sign-in
+is still this tab's login. If another tab signed in as someone else, nothing is sent (changes stay in this login's on-device outbox and
+save when that login signs in again) and the tab tells the person and reloads as the new login. Same-tab sign-in is unaffected.
+Tested with a mocked client (same user saves; switched user sends nothing, not marked refused, tab reloads; same-tab sign-in no reload)
+and both builds boot cleanly in headless Chrome.
+**Needs the owner**: ask **WAU** to re-enter the 3 transfers from this afternoon (and check the second order), and to use one login per
+browser (or a separate browser/profile for the expert login). Older items (activity_log size, SQL 50/52, SAN expert, etc.) still open.
+
 ## 26 Nov 2026, 12:25 IST · automatic check (window 09:23–12:23 IST)
 Healthy: no 5xx in ~19.3k requests, no database/edge-function/login errors, advisors unchanged; only 10 × `order_experts` + 10 × `patch_extra` 403s for almisha on ETA-1793816841104 (10:40–11:40 IST, below threshold); data checks clean except the known SAN-1794807224485 (open order on inactive expert FATHIMA.HANA). Owner items from 25 Nov 12:25 (activity_log size, SQL 50/52, SAN expert, etc.) still open.
 
