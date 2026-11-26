@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 26 Nov 2026, 18:25 IST · automatic check (window 15:22–18:22 IST)
+Healthy: no 5xx in ~47.7k requests, no database/edge-function errors, logins fine (3 weak-password refusals when creating a login, 1 wrong password, 1 one-off refresh timeout — noise), advisors unchanged; only 3 × `set_task_status` 400s for wau at 15:28 IST (the same mixed-login tab, before the 15:25 fix reached it); data checks clean except the known SAN-1794807224485 (open order on inactive expert FATHIMA.HANA). WAU has since entered one transfer today (t1795687698936, ₹2,970, pending) — owner to confirm it covers the 3 lost ones. Older owner items still open.
+
 ## 26 Nov 2026, 15:25 IST · automatic check (window 12:22–15:22 IST)
 **Checked**: API errors (~56.8k requests, no 5xx), database errors, edge functions (no errors), logins (4 wrong passwords from a
 `localhost:3000` page + 1 stale refresh token — noise), security advisors (unchanged), runbook data checks (clean except the known
