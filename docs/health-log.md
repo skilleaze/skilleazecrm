@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 26 Nov 2026, 12:25 IST · automatic check (window 09:23–12:23 IST)
+Healthy: no 5xx in ~19.3k requests, no database/edge-function/login errors, advisors unchanged; only 10 × `order_experts` + 10 × `patch_extra` 403s for almisha on ETA-1793816841104 (10:40–11:40 IST, below threshold); data checks clean except the known SAN-1794807224485 (open order on inactive expert FATHIMA.HANA). Owner items from 25 Nov 12:25 (activity_log size, SQL 50/52, SAN expert, etc.) still open.
+
 ## 26 Nov 2026, 09:25 IST · automatic check (window 06:23–09:23 IST)
 Healthy: no 4xx/5xx in ~2.2k requests except 1 wrong password, no database/edge-function/login errors, advisors unchanged; data checks clean except the known SAN-1794807224485 (open order on inactive expert FATHIMA.HANA). Live version.txt not reachable from the sandbox (proxy). Owner items from 12:25 (activity_log size, SQL 50/52, SAN expert, etc.) still open.
 
