@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 27 Nov 2026, 03:25 IST · automatic check (window 00:23–03:23 IST)
+Healthy: no 4xx/5xx in ~2.7k requests (quiet night), no database/edge-function/login errors (1 column error was the last check's own query), advisors unchanged; data checks clean except the known SAN-1794807224485 (inactive expert FATHIMA.HANA) and ETA-1793816841104 (CV still Not started, `expert` ALMISHA vs `wx.cv` SHIREENA — still needs ops to reassign). Live version.txt not reachable from the sandbox (proxy). Older owner items still open.
+
 ## 27 Nov 2026, 00:25 IST · automatic check (window 21:23–00:23 IST)
 Healthy: no 4xx/5xx in ~20.7k requests, no database/edge-function/login errors, advisors unchanged; data checks clean except the known SAN-1794807224485 (inactive expert FATHIMA.HANA) and ETA-1793816841104 (CV still Not started, `expert` ALMISHA vs `wx.cv` SHIREENA — still needs ops to reassign). Live version.txt not reachable from the sandbox (proxy). Older owner items still open.
 
