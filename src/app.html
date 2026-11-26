@@ -5155,7 +5155,7 @@ const HR_LEAVE = { sick: 'Sick leave', half: 'Half day', wfh: 'Work from home' }
 const hrT = ms => ms ? new Date(ms).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : '–';
 const hrH = h => { const m = Math.round((h || 0) * 60); return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm'; };
 const hrDist = (a, b) => { const R = 6371000, t = x => x * Math.PI / 180, dl = t(b.lat - a.lat), dn = t(b.lng - a.lng), q = Math.sin(dl / 2) ** 2 + Math.cos(t(a.lat)) * Math.cos(t(b.lat)) * Math.sin(dn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(q)); };
-const hrGeo = () => new Promise(res => { window.__geoErr = ''; if (!navigator.geolocation || (typeof isSecureContext !== 'undefined' && !isSecureContext)) { window.__geoErr = 'unsupported'; return res(null); }
+const hrGeo = () => new Promise(res0 => { let done = false; const res = v => { if (!done) { done = true; clearTimeout(tm); res0(v); } }, tm = setTimeout(() => { if (!window.__geoErr) window.__geoErr = 'unavailable'; res(null); }, 35000); window.__geoErr = ''; if (!navigator.geolocation || (typeof isSecureContext !== 'undefined' && !isSecureContext)) { window.__geoErr = 'unsupported'; return res(null); }
   const ok = p => res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) });
   navigator.geolocation.getCurrentPosition(ok, e1 => { if (e1 && e1.code === 1) { window.__geoErr = 'denied'; return res(null); }
     navigator.geolocation.getCurrentPosition(ok, e2 => { window.__geoErr = e2 && e2.code === 1 ? 'denied' : 'unavailable'; res(null); }, { enableHighAccuracy: false, timeout: 20000, maximumAge: 300000 }); },
@@ -5212,7 +5212,7 @@ class HRMix extends Core2 {
   async hrPunch(mode) { const me = this.hrMe(); if (!me) return; const S = this.hrSet(), open = this.hrOpen(me.key), today = iso(new Date()), office = this.hrIsOffice(me);
     if (!(open && open.date === today) && office && !mode) { this.setState({ hrChoose: true, hrPromptDone: true }); return; }
     if (mode) this.setState({ hrChoose: false });
-    if (this._punching) return; this._punching = true; this.setState({ hrBusy: true });
+    if (this._punching && Date.now() - (this._punchAt || 0) < 45000) return; this._punching = true; this._punchAt = Date.now(); this.setState({ hrBusy: true });
     try { const goingIn = !(open && open.date === today);
       let loc = this.state.hrNoLocOk ? null : await hrGeo();
       if (!loc && !this.state.hrNoLocOk) { this.setState({ hrGeoFail: { mode: mode || '', help: hrGeoHelp(), denied: window.__geoErr === 'denied' } }); return; }
@@ -5870,7 +5870,7 @@ class ComponentBase extends HRMix {
           v.kycOpenNow = () => this.setState({ kycOpen: true, kycLater: false }); } }
       const meC = this.state.hrChoose && this.state.user ? this.hrMe() : null; v.hrChooseShow = !!meC;
       if (meC) v.hrCh = { busy: this.state.hrBusy ? 'Saving…' : '', isBusy: !!this.state.hrBusy, office: () => this.hrPunch('office'), wfh: () => this.hrPunch('wfh'), away: () => this.hrPunch('away'), cancel: () => this.setState({ hrChoose: false }), leave: () => this.setState({ hrChoose: false }, () => this.openDialog('hrLeave')) };
-      if (v.hrPop) { const brP = meP.branch === 'puttur'; v.hrPopV = { name: meP.role === 'sales' ? meP.name : meP.name.split(' ')[0], when: new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }), note: this.hrIsOffice(meP) ? 'At the office you will take a photo of the office. Working from home or not there yet? You can choose that next.' : 'We will save your location with your punch.', btn: this.state.hrBusy ? 'Saving…' : 'Punch in now', punch: () => this.hrPunch(), leave: () => this.openDialog('hrLeave') }; }
+      if (v.hrPop) { const brP = meP.branch === 'puttur'; v.hrPopV = { name: meP.role === 'sales' ? meP.name : meP.name.split(' ')[0], when: new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }), note: this.hrIsOffice(meP) ? 'At the office you will take a photo of the office. Working from home or not there yet? You can choose that next.' : 'We will save your location with your punch.', btn: this.state.hrBusy ? 'Getting your location…' : 'Punch in now', punch: () => this.hrPunch(), leave: () => this.openDialog('hrLeave') }; }
       const GF = this.state.hrGeoFail; v.geoFail = !!GF; v.geoF = GF ? { help: GF.help, title: GF.denied ? 'Location is blocked on this phone' : 'We could not get your location', retry: () => { const m = GF.mode; this.setState({ hrGeoFail: null }, () => GF.arrive ? this.hrArrive() : this.hrPunch(m || undefined)); }, skip: () => { const m = GF.mode; if (GF.arrive) { this.setState({ hrGeoFail: null }); return this.toast('Reached office needs your location. Allow it and try again.'); } this.setState({ hrGeoFail: null, hrNoLocOk: true }, () => this.hrPunch(m || undefined)); }, close: () => this.setState({ hrGeoFail: null }) } : { help: '', title: '', retry: () => {}, skip: () => {}, close: () => {} }; }
     if (v.showApp && this.state.user && Array.isArray(v.navItems) && v.navItems.length) { const u0 = this.state.user, me = this.hrMe(), sc = this.hrScope(), base = v.navItems.find(n => n.bg === 'transparent') || v.navItems[0], vw = this.state.view, A0 = this.hrAll();
       const mk = (id, label, icon, short, badge) => { const on = vw === id; return { ...base, label, icon, short, bg: on ? '#e8eef9' : 'transparent', fg: on ? '#042d7c' : base.fg, tabBg: on ? '#e8eef9' : 'transparent', tabFg: on ? '#042d7c' : base.tabFg, hasBadge: badge > 0, badge, cur: on ? 'page' : undefined, go: () => this.go(id) }; };
@@ -6683,7 +6683,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795546604647';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795678247691';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data);
           // A save that keeps failing (e.g. a refused change re-sent in a loop) used to block the update forever, so the fixed build never arrived. After 3 tries, reload anyway: unsaved changes are in this device's outbox and are saved again after the reload.
           this._verWait = (this._verWait || 0) + 1; if (this._verWait < 3) { this.livePush(); return; } } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
