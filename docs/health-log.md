@@ -2,6 +2,12 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 28 Nov 2026, 15:25 IST · automatic check (window 12:22–15:22 IST)
+Checked: ~49.6k API requests, database/edge-function/login logs, advisors (unchanged), open-order status data.
+**Found — expert stuck on SIGMA-1794924415055.** 8 refused `set_task_status` calls from hafsath.muyeena (13:49–14:18 IST): 2 × "Balance not received yet" (correct rule) and 6 × "Pick which service of this order you are updating". Root cause (proved by `activity_log`): agent SIGMA removed LinkedIn from this CV + LinkedIn order at 13:51 IST, but its entry stayed in the per-service status map (`extra.tst` = {cv: DRAFT SHARED, linkedin: PENDING}). The app now sees a CV-only order and sends no service name; the server still sees two services and refuses. The order is also stuck at Not started overall. Same stale key on WAU-1793944796085 (Job portal removed 6 Nov; overall status unaffected).
+**Fix written, NOT applied:** `docs/pending-sql/53_prune_removed_service_status.sql` — a BEFORE UPDATE trigger (`trg_h_prune_tst`, runs after the guard, before keep-forward) keeps `extra.tst` to the services the order still has and recomputes the overall status (forward only), plus a one-time touch of those 2 orders. The rollback-only test run (expert save on the stuck order, normal combined save, agent and operations removing a service) could not run: the Supabase connector asked for an interactive confirmation that nobody was there to give, so nothing was executed or applied.
+**For the owner:** run the test/apply of 53 in a live session (or paste the file into the SQL Editor after a quick look). Until then, Hafsath cannot move SIGMA-1794924415055 past Draft shared; ops/management can still set it. Known items unchanged: SAN-1794807224485 (inactive expert FATHIMA.HANA), ETA-1793816841104 (CV `expert` ALMISHA vs `wx.cv` SHIREENA). Other data checks not re-run this time (connector blocked after the confirmation timeout). Live version.txt not reachable from the sandbox (proxy).
+
 ## 28 Nov 2026, 12:25 IST · automatic check (window 09:23–12:23 IST)
 Healthy: no 4xx/5xx in ~46.7k requests, no database/edge-function/login errors, advisors unchanged; data checks clean except the known SAN-1794807224485 (inactive expert FATHIMA.HANA) and ETA-1793816841104 (CV `expert` ALMISHA vs `wx.cv` SHIREENA — still needs ops to reassign); PUT-1794637817317 `expert` ≠ `wx.cv` is the known non-defect. Live version.txt not reachable from the sandbox (proxy). Older owner items still open.
 
