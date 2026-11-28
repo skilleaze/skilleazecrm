@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 28 Nov 2026, 21:25 IST · automatic check (window 18:23–21:23 IST)
+Healthy: no 4xx/5xx in ~16.5k requests, no database/edge-function/login errors, advisors unchanged; data checks clean (status mismatch 0, missing expert links 0, closed without closeAt 0, transfers pending > 7 days 0, HR key differences 0) except the known items: SIGMA-1794924415055 still stuck for Hafsath (stale LinkedIn in `extra.tst`; SQL 53 still pending for the owner — not retried, blocked twice by the connector approval prompt), WAU-1793944796085 same stale key, SAN-1794807224485 (inactive expert FATHIMA.HANA), ETA-1793816841104 (now Draft shared under `wx.cv` SHIREENA; `expert` still ALMISHA). Live version.txt not checked (proxy).
+
 ## 28 Nov 2026, 18:25 IST · automatic check (window 15:23–18:23 IST)
 Checked: ~61.7k API requests (no 4xx/5xx), database/edge-function/login logs (no errors — the 2 at 15:23 IST were the last check's own queries), advisors (unchanged), data checks (status mismatch 0, missing expert links 0, closed without closeAt 0, transfers pending > 7 days 0, HR key differences 0).
 **Still open — SIGMA-1794924415055 (Hafsath) stuck at Draft shared** (overall PENDING, `extra.tst` still holds removed LinkedIn). Re-verified: only SIGMA-1794924415055 and WAU-1793944796085 carry a removed service's status. No new refusals in this window (she has stopped retrying).
