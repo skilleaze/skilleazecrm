@@ -2,6 +2,9 @@
 
 Newest first. Written by the automatic health check (see `health-check.md`).
 
+## 28 Nov 2026, 09:25 IST · automatic check (window 06:23–09:23 IST)
+Healthy: no 4xx/5xx in ~3.5k requests except 1 wrong password (`localhost:3000` page), no database/edge-function/login errors (1 function error was the last check's own query), advisors unchanged; data checks clean except the known SAN-1794807224485 (inactive expert FATHIMA.HANA) and ETA-1793816841104 (CV `expert` ALMISHA vs `wx.cv` SHIREENA — still needs ops to reassign); PUT-1794637817317 / SIGMA-1794768910476 also show `expert` ≠ `wx.cv` but `order_experts` matches (copy of the LinkedIn expert / blank) — not a defect. Live version.txt not reachable from the sandbox (proxy). Older owner items still open.
+
 ## 28 Nov 2026, 06:25 IST · automatic check (window 03:23–06:23 IST)
 Healthy: no 4xx/5xx (only 16 realtime connects — quiet night), no database/edge-function/login errors, advisors unchanged; data checks clean except the known SAN-1794807224485 (inactive expert FATHIMA.HANA) and ETA-1793816841104 (CV `expert` ALMISHA vs `wx.cv` SHIREENA — still needs ops to reassign). Live version.txt not reachable from the sandbox (proxy). Older owner items still open.
 
