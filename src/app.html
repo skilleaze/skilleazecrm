@@ -3856,6 +3856,21 @@ class Core extends Base {
     window.addEventListener('scroll', this._sc, true);
     if (!LIVE_MODE && (!this.props.startRole || this.props.startRole === 'login')) { try { const ss = JSON.parse(localStorage.getItem(SESSION)); if (ss && ss.role && Object.values(ACCOUNTS).some(a => a.role === ss.role && a.id === ss.id)) this.login(ss.role, ss.id); else if (ss && ss.role === 'cse') this._pendSess = ss; else if (ss) localStorage.removeItem(SESSION); } catch (e) {} }
     this._r = () => this.setState({ w: window.innerWidth }); window.addEventListener('resize', this._r); }
+  proofFields(f, need) { const P = (Array.isArray(f.proofs) && f.proofs.length ? f.proofs : f.proof ? [f.proof] : []).slice(0, PROOF_MAX), n = P.length, full = n >= PROOF_MAX;
+    const put = list => this.setState(s => ({ form: { ...s.form, proofs: list, proof: list[0] || '', proofName: '' }, err: '' }));
+    const rm = i => put(P.filter((_, j) => j !== i));
+    const add = e => { const fl = [...((e.target && e.target.files) || [])].filter(x => /^image\//.test(x.type) || /\.(jpe?g|png|webp)$/i.test(x.name)); if (e.target) e.target.value = '';
+      if (!fl.length) return this.toast('Choose a JPG, PNG or WEBP image.');
+      const room = PROOF_MAX - n, use = fl.slice(0, room); if (fl.length > room) this.toast('Up to ' + PROOF_MAX + ' screenshots per order. Added ' + use.length + '.');
+      const got = []; use.forEach((file, k) => this.readProof(file, url => { got[k] = url; if (got.filter(Boolean).length === use.length) { const cur = this.state.form || {}, base = (Array.isArray(cur.proofs) && cur.proofs.length ? cur.proofs : cur.proof ? [cur.proof] : []); put([...base, ...got].slice(0, PROOF_MAX)); } })); };
+    const gal = n ? React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 } }, P.map((src, i) => React.createElement('div', { key: i, style: { position: 'relative', borderRadius: 12, overflow: 'hidden', border: '1px solid #c6e6cf', background: '#f8f9fa', height: 150 } },
+        React.createElement('img', { src, alt: 'Payment screenshot ' + (i + 1), style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }),
+        React.createElement('span', { style: { position: 'absolute', left: 6, bottom: 6, background: 'rgba(4,45,124,.85)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999, padding: '3px 8px' } }, (i + 1) + ' of ' + n),
+        React.createElement('button', { type: 'button', 'aria-label': 'Remove screenshot ' + (i + 1), title: 'Remove', onClick: ev => { ev.preventDefault(); ev.stopPropagation(); rm(i); }, style: { position: 'absolute', top: 6, right: 6, width: 30, height: 30, border: 0, borderRadius: 999, background: 'rgba(255,255,255,.95)', color: '#b3261e', fontSize: 18, lineHeight: 1, cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,.2)' } }, '×')))) : null;
+    return [...(n ? [{ key: 'proofGal', label: 'Payment screenshots · ' + n + ' added', isImage: true, imgEl: gal }] : []),
+      full ? { key: 'proofFull', label: '', isInfo: true, info: PROOF_MAX + ' of ' + PROOF_MAX + ' added. Tap × on one to replace it.' }
+        : { key: 'proof', label: n ? '' : 'Payment screenshots', isFile: true, multi: true, accept: 'image/jpeg,image/png,image/webp,image/*', hasImg: false, noImg: true, imgEl: null,
+          fileTitle: n ? 'Add another screenshot' : 'Upload payment screenshot', fileSub: n ? 'Paid in parts? Add each payment · up to ' + PROOF_MAX : need + ' · JPG, PNG or WEBP · up to ' + PROOF_MAX, bd: n ? '#c6e6cf' : '#9db3de', onFile: add }]; }
   readProof(file, cb) {
     const r = new FileReader();
     r.onload = () => { const img = new Image(); img.onload = () => { const sc = Math.min(1, 1000 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); cb(c.toDataURL('image/jpeg', 0.72)); }; img.src = r.result; };
@@ -4224,7 +4239,7 @@ class Core extends Base {
       if (canUrgent) actions.push({ label: urgent ? 'Remove urgent' : 'Mark urgent', fn: () => this.updOrder(o.id, { urgent: !urgent, status: ord.status === 'URGENT' ? 'PENDING' : ord.status }, urgent ? 'Urgent removed' : o.name + ' marked urgent') });
       const stT = (via, st) => via && via !== 'personal' && st ? ' (' + STATUS_TXT[st] + ')' : '';
       const viaText = ord.pay === 'REFUNDED' ? '' : VIA_L[ord.via || 'personal'] + stT(ord.via, ord.proofStatus) + (ord.balanceVia ? ' + ' + VIA_L[ord.balanceVia] + stT(ord.balanceVia, ord.balanceProofStatus) : '');
-      const proofs = [ord.proof && { label: 'Payment · ' + VIA_L[ord.via], img: ord.proof }, ord.balanceProof && { label: 'Balance · ' + VIA_L[ord.balanceVia], img: ord.balanceProof }].filter(Boolean);
+      const proofs = [...proofItems(ord, 'first', 'Payment · ' + VIA_L[ord.via]), ...proofItems(ord, 'balance', 'Balance · ' + VIA_L[ord.balanceVia])];
       const aedNote = ord.currency === 'AED' ? 'AED ' + ord.aed + ' × ' + AED_RATE : '';
       return { ...o, aedNote, viaText, hasProof: proofs.length > 0, viewProof: () => this.openDialog('proof', { items: proofs }), isUrgentRow: urgent, payKey, payText: (PAY_ST.find(p => p[0] === payKey) || PAY_ST[0])[1], payOpts, canPayDd: canPay, noPayDd: !canPay, setPayS: setPay, pBg: pc[0], pFg: pc[1], isPartial: ord.pay === 'PARTIAL', partialDue: inr(ord.price - ord.paid) + ' due', actions, hasActions: actions.length > 0, pipe: cur, pipeText: mNote || SL(cur, tRow), pipeOpts: opts, canPipe, noPipe: !canPipe, setPipe, stBg: c[0], stFg: c[1] };
     });
@@ -4518,7 +4533,7 @@ class Core extends Base {
         chk: { tabs: [['pending', 'Awaiting'], ['confirmed', 'Confirmed'], ['rejected', 'Rejected']].map(([k, l]) => ({ label: l, bg: tab === k ? B : '#fff', fg: tab === k ? '#fff' : INK, bd: tab === k ? B : LINE, pick: () => this.setState({ chkTab: k }) })),
           isPending: tab === 'pending', empty: !list.length, emptyText: tab === 'pending' ? 'Nothing to check. All caught up.' : 'Nothing here yet.',
           items: list.slice(0, 60).map(it => ({ name: it.o.name, sub: agentLabel(it.o.agent) + ' · ' + svcText(it.o) + ' · ' + fD(it.o.date), amount: inr(it.amount), aed: it.o.currency === 'AED' ? 'AED ' + (it.part === 'first' && it.o.paidAed ? it.o.paidAed : it.o.aed) : it.o.currency === 'USD' ? '$' + (it.part === 'first' && it.o.paidUsd ? it.o.paidUsd : it.o.usd) : '', channel: VIA_L[it.via] + (it.part === 'balance' ? ' · balance' : ''),
-            hasProof: !!it.proof, noProof: !it.proof, thumbEl: it.proof ? React.createElement('img', { src: it.proof, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }) : null, view: () => this.openDialog('proof', { items: [{ label: VIA_L[it.via] + ' · ' + it.o.name, img: it.proof }] }),
+            hasProof: !!it.proof, noProof: !it.proof, thumbEl: it.proof ? proofThumb(it.o, it.part) : null, view: () => this.openDialog('proof', { items: proofItems(it.o, it.part, VIA_L[it.via] + ' · ' + it.o.name) }),
             confirm: () => { setSt(it, 'confirmed'); this.toast('Confirmed ' + inr(it.amount) + ' in ' + VIA_L[it.via]); }, reject: () => { setSt(it, 'rejected'); this.toast('Marked as not received'); } })) } });
     }
     if (u.role === 'management' && s.view === 'cash') {
@@ -4846,8 +4861,7 @@ class Core2 extends Core {
         ...(f.payType === 'PARTIAL' && f.via ? [USDV(f.via) ? inp('paidUsd', 'How much was received? (USD)', 'number', { placeholder: 'Amount in USD', hasHint: true, hint: +f.paidUsd > 0 ? '$' + (+f.paidUsd) + ' = ₹' + num(ppInr(+f.paidUsd || 0)) : 'Enter the USD amount received so far.' }) : AEDV(f.via)
           ? inp('paidAed', 'How much was received? (AED)', 'number', { placeholder: 'Amount in AED', hasHint: true, hint: +f.paidAed > 0 ? 'AED ' + num(+f.paidAed) + ' = ₹' + num(Math.round((+f.paidAed || 0) * AED_RATE)) + (+f.priceAed > 0 ? ' · balance due AED ' + num(Math.max(0, +f.priceAed - +f.paidAed)) : '') : 'Enter the AED amount received so far.' })
           : inp('paid', 'How much was received? (₹)', 'number', { placeholder: 'Amount received so far', hasHint: !!(+f.price > 0), hint: +f.price > 0 && +f.paid > 0 ? 'Balance due ₹' + num(Math.max(0, +f.price - +f.paid)) : 'Enter the amount the customer has paid so far.' })] : []),
-        ...(f.via ? [{ key: 'proof', label: 'Payment screenshot', isFile: true, hasImg: !!f.proof, noImg: !f.proof, imgEl: f.proof ? React.createElement('img', { src: f.proof, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }) : null, fileTitle: f.proof ? 'Screenshot added. Tap to change' : 'Upload payment screenshot', fileSub: f.proof ? (f.proofName || 'image') : 'Required for ' + (VIA_L[f.via] || 'this payment'), bd: f.proof ? '#c6e6cf' : '#9db3de',
-          onFile: e => { const file = e.target.files && e.target.files[0]; if (!file) return; this.readProof(file, url => this.setState(s => ({ form: { ...s.form, proof: url, proofName: file.name }, err: '' }))); } }] : []),
+        ...(f.via ? this.proofFields(f, 'Required for ' + (VIA_L[f.via] || 'this payment')) : []),
         ...(this.state.user && this.state.user.role === 'cse' ? [{ key: 'bdeInfo', label: 'Converted by', isInfo: true, info: (P.staff.find(x => x.id === this.state.user.id) || {}).name || 'You' }] : [sel('bde', 'Converted by', [['', 'Manager / walk-in'], ...P.staff.filter(s => s.role === 'bde' && !s.left).map(s => [s.id, s.name])])]),
         { key: 'stamp', label: 'Order date & time', isInfo: true, info: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' · set automatically' }] };
     }
@@ -4926,7 +4940,7 @@ class Core2 extends Core {
       if (f.payType === 'PARTIAL' && !(recv > 0 && recv < priceInr)) return this.setState({ err: 'Enter how much was received. It must be more than 0 and less than the price.' });
       const now = Date.now(), paid = f.payType === 'PARTIAL' ? recv : priceInr;
       const wx = {}; [...new Set(f.services.map(svcType))].forEach(T => { if (f['wx_' + T]) wx[T] = f['wx_' + T]; });
-      const o = { id: 'PUT-' + now, agent: 'PUTTUR', branch: 'puttur', bde: f.bde || '', wx, assignedAt: Object.keys(wx).length ? now : undefined, date: iso(new Date(now)), createdAt: now, name: f.name.trim(), phone: f.phone.trim(), services: f.services, price: priceInr, paid, pay: paid >= priceInr ? 'PAID' : 'PARTIAL', expert: Object.values(wx)[0] || '', status: 'PENDING', urgent: false, payAt: now, submitAt: null, closeAt: null, via: f.via, proof: f.proof, proofStatus: 'pending', currency: AEDV(f.via) ? 'AED' : USDV(f.via) ? 'USD' : undefined, aed: AEDV(f.via) ? +f.priceAed : undefined, aedPaid: AEDV(f.via) ? (f.payType === 'PARTIAL' ? +f.paidAed : +f.priceAed) : undefined, usd: USDV(f.via) ? +f.priceUsd : undefined, paidUsd: USDV(f.via) ? (f.payType === 'PARTIAL' ? +f.paidUsd : +f.priceUsd) : undefined, t: 'P', enqId: f.enqId || undefined, source: f.source || undefined, brief: String(f.brief || '').trim() || undefined };
+      const o = { id: 'PUT-' + now, agent: 'PUTTUR', branch: 'puttur', bde: f.bde || '', wx, assignedAt: Object.keys(wx).length ? now : undefined, date: iso(new Date(now)), createdAt: now, name: f.name.trim(), phone: f.phone.trim(), services: f.services, price: priceInr, paid, pay: paid >= priceInr ? 'PAID' : 'PARTIAL', expert: Object.values(wx)[0] || '', status: 'PENDING', urgent: false, payAt: now, submitAt: null, closeAt: null, via: f.via, proof: f.proof, ...(Array.isArray(f.proofs) && f.proofs.length > 1 ? { proofs: f.proofs.slice(0, PROOF_MAX) } : {}), proofStatus: 'pending', currency: AEDV(f.via) ? 'AED' : USDV(f.via) ? 'USD' : undefined, aed: AEDV(f.via) ? +f.priceAed : undefined, aedPaid: AEDV(f.via) ? (f.payType === 'PARTIAL' ? +f.paidAed : +f.priceAed) : undefined, usd: USDV(f.via) ? +f.priceUsd : undefined, paidUsd: USDV(f.via) ? (f.payType === 'PARTIAL' ? +f.paidUsd : +f.priceUsd) : undefined, t: 'P', enqId: f.enqId || undefined, source: f.source || undefined, brief: String(f.brief || '').trim() || undefined };
       const nCp = Math.max(1, Math.min(5, Math.round(+f.copies || 1))), extraO = [];
       if (nCp > 1) { const sp = (v, k) => { const tot = +v || 0, each = Math.floor(tot / nCp * 100) / 100; return k === 1 ? +(tot - each * (nCp - 1)).toFixed(2) : each; }, SK = ['price', 'paid', 'aed', 'aedPaid', 'usd', 'paidUsd'], b0 = { ...o };
         Object.assign(o, { payGroup: b0.id, payGroupN: nCp, groupNo: 1 }); SK.forEach(k => { if (typeof b0[k] === 'number') o[k] = sp(b0[k], 1); });
@@ -6683,7 +6697,7 @@ class AppCore extends PayFromMix {
 
   componentDidMount() { if (super.componentDidMount) super.componentDidMount();
     setTimeout(() => { try { if (window.__skzTbl) return; const s = [...document.querySelectorAll('script')].find(x => /var NUM = \//.test(x.textContent || '')); if (s) (0, eval)(s.textContent); } catch (e) {} }, 0);
-    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795686958224';
+    if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE && !this._verT) { const BUILD = 'b1795864427904';
       const chk = () => fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => { t = String(t || '').trim(); if (!/^b\d+$/.test(t) || t === BUILD) return; if (this.state.dialog) return; if (LIVE_MODE && (this._pushing || this.state.liveUnsaved || (this._lastPushed && this.state.data && this._lastPushed !== this.state.data))) { this.outboxSave(this._lastPushed, this.state.data);
           // A save that keeps failing (e.g. a refused change re-sent in a loop) used to block the update forever, so the fixed build never arrived. After 3 tries, reload anyway: unsaved changes are in this device's outbox and are saved again after the reload.
           this._verWait = (this._verWait || 0) + 1; if (this._verWait < 3) { this.livePush(); return; } } this.toast('Updating to the latest version…'); setTimeout(() => { try { location.reload(); } catch (e) {} }, 1500); }).catch(() => {});
@@ -6768,7 +6782,7 @@ class AppCore extends PayFromMix {
         brTabs: [['all', 'Both branches'], ['cloud', 'Cloud'], ['puttur', 'Puttur office']].map(([k, l]) => { const n = nB(k); return { label: l + (n ? ' · ' + n : ''), bg: brK === k ? TINT : '#fff', fg: brK === k ? B : INK, bd: brK === k ? B : LINE, pick: () => this.setState({ chkBr: k }) }; }),
         isPending: tab === 'pending', empty: !list.length, emptyText: tab === 'pending' ? 'Nothing to check. All caught up.' : 'Nothing here yet.',
         items: list.slice(0, 80).map(it => ({ name: it.o.name, sub: who(it.o) + ' · ' + svcText(it.o) + ' · ' + fD(it.o.date), amount: inr(it.amount), aed: it.o.currency === 'AED' ? 'AED ' + (it.part === 'first' && it.o.paidAed ? it.o.paidAed : it.o.aed) : it.o.currency === 'USD' ? '$' + (it.part === 'first' && it.o.paidUsd ? it.o.paidUsd : it.o.usd) : '', channel: VIA_L[it.via] + (it.part === 'balance' ? ' · balance' : ''),
-          hasProof: !!it.proof, noProof: !it.proof, thumbEl: it.proof ? React.createElement('img', { src: it.proof, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }) : null, view: () => this.openDialog('proof', { items: [{ label: VIA_L[it.via] + ' · ' + it.o.name, img: it.proof }] }),
+          hasProof: !!it.proof, noProof: !it.proof, thumbEl: it.proof ? proofThumb(it.o, it.part) : null, view: () => this.openDialog('proof', { items: proofItems(it.o, it.part, VIA_L[it.via] + ' · ' + it.o.name) }),
           confirm: () => { setSt(it, 'confirmed'); this.toast('Confirmed ' + inr(it.amount) + ' in ' + VIA_L[it.via]); }, reject: () => { setSt(it, 'rejected'); this.toast('Marked as not received'); } })) } });
     return v; }
   mktVals(v) { const s = this.state, u = s.user, d = s.data, can = this.mktCan(); this.clearFlags(v);
@@ -6957,13 +6971,18 @@ const CHK_ACC = ['inco', 'uae', 'gateway', 'gwuae', 'haseeb', 'paypal'];
 const CHK_ST = { pending: ['Awaiting', '#fdf0d9', '#8a5300'], changes: ['Needs changes', '#fbe9e5', '#a3321f'], confirmed: ['Confirmed', '#e3f4ea', '#1e6b3f'], rejected: ['Rejected', '#eef0f3', '#5f6f7f'] };
 const pfK = part => part === 'balance' ? 'balanceProof' : 'proof';
 const fTm = ms => ms ? new Date(ms).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+const PROOF_MAX = 3;
+// Every screenshot for one payment. proof = first (all older code and orders), proofs = all of them when there are more.
+const proofItems = (o, part, label) => { const L = proofsOf(o, part); return L.map((img, i) => ({ label: label + (L.length > 1 ? ' · screenshot ' + (i + 1) + ' of ' + L.length : ''), img })); };
+const proofThumb = (o, part) => { const L = proofsOf(o, part); return React.createElement('span', { style: { position: 'relative', display: 'block', width: '100%', height: '100%' } }, React.createElement('img', { src: L[0], alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }), L.length > 1 ? React.createElement('span', { style: { position: 'absolute', right: 3, bottom: 3, background: '#042d7c', color: '#fff', fontSize: 11, fontWeight: 800, borderRadius: 999, padding: '2px 6px', lineHeight: 1.2 } }, '×' + L.length) : null); };
+const proofsOf = (o, part) => { if (!o) return []; if (part === 'balance') return [o.balanceProof].filter(Boolean); const L = Array.isArray(o.proofs) ? o.proofs.filter(Boolean) : []; return L.length > 1 && L[0] === o.proof ? L : [o.proof].filter(Boolean); };
 class V3A extends AppCore {
   meLabel() { const u = this.state.user || {}, lp = this.state.liveProfile; if (u.role === 'sales') return agentLabel(u.id); if (lp && lp.full_name) return lp.full_name; const a = Object.values(ACCOUNTS).find(x => x.id === u.id && x.role === u.role); return (a && a.name) || tc(u.id || 'Management'); }
   proofItem(ref) { const o = ((this.state.data || {}).orders || []).find(x => x.id === (ref && ref.oid)); if (!o) return null; const part = ref.part === 'balance' ? 'balance' : 'first';
     return { o, part, via: part === 'balance' ? o.balanceVia : o.via, amount: part === 'balance' ? o.price - firstAmt(o) : firstAmt(o), proof: part === 'balance' ? o.balanceProof : o.proof }; }
   proofSet(it, fields, what, msg) { const K = pfK(it.part), now = Date.now(), me = this.meLabel();
     this.setData(dd => ({ ...dd, orders: dd.orders.map(q => { if (!(q.id === it.o.id || (it.part === 'first' && it.o.payGroup && q.payGroup === it.o.payGroup))) return q;
-      const n = { ...q }; Object.entries(fields).forEach(([k, val]) => { const key = k === 'via' ? (it.part === 'balance' ? 'balanceVia' : 'via') : k === 'img' ? K : K + k; if (val === undefined) delete n[key]; else n[key] = val; });
+      const n = { ...q }; Object.entries(fields).forEach(([k, val]) => { const key = k === 'via' ? (it.part === 'balance' ? 'balanceVia' : 'via') : k === 'img' ? K : k === 'imgs' ? 'proofs' : K + k; if (val === undefined) delete n[key]; else n[key] = val; });
       if (fields.By) n[K + 'ByName'] = me;
       n[K + 'Hist'] = [...(q[K + 'Hist'] || []), { at: now, by: me, st: n[K + 'Status'] || '', what: what || '' }].slice(-20); return n; }) }));
     if (msg) this.toast(msg); }
@@ -6983,14 +7002,14 @@ class V3A extends AppCore {
     const btn = (label, fn, kind) => ({ label, fn, ...(kind === 'ok' ? { bg: '#1e6b3f', fg: '#fff', bd: '#1e6b3f' } : kind === 'bad' ? { bg: '#fff', fg: '#a3321f', bd: '#e3e4e8' } : kind === 'warn' ? { bg: '#fdf0d9', fg: '#8a5300', bd: '#f0d49a' } : { bg: '#fff', fg: '#042d7c', bd: '#cdd5e3' }) });
     const items = list.slice(0, N).map(it => { const o = it.o, k = K(it), st = it.st, T = CHK_ST[st], upd = +o[k + 'Upd'] || 0;
       const p2 = isP(it) && (o.balanceProof || o.balanceAt), tm = ms => ms ? new Date(ms).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : fD(o.date), a1 = firstAmt(o), a2 = Math.max(0, (+o.price || 0) - a1);
-      const view = () => this.openDialog('proof', { items: p2 ? [{ label: 'Payment 1 · initial partial payment · ' + inr(a1) + ' · ' + VIA_L[o.via] + ' · ' + tm(o.payAt || o.createdAt), img: o.proof }, { label: 'Payment 2 · pending balance cleared · ' + inr(a2) + ' · ' + VIA_L[o.balanceVia] + ' · ' + tm(o.balanceAt), img: o.balanceProof }].filter(x => x.img) : [{ label: VIA_L[it.via] + ' · ' + o.name, img: it.proof }] });
+      const nShots = proofsOf(o, it.part).length, view = () => this.openDialog('proof', { title: nShots > 1 && !p2 ? nShots + ' payment screenshots' : undefined, items: p2 ? [...proofItems(o, 'first', 'Payment 1 · initial partial payment · ' + inr(a1) + ' · ' + VIA_L[o.via] + ' · ' + tm(o.payAt || o.createdAt)), ...proofItems(o, 'balance', 'Payment 2 · pending balance cleared · ' + inr(a2) + ' · ' + VIA_L[o.balanceVia] + ' · ' + tm(o.balanceAt))] : proofItems(o, it.part, VIA_L[it.via] + ' · ' + o.name) });
       const paySum = isP(it) && (p2 || o.pay === 'PARTIAL') ? ' · Total ' + inr(o.price || 0) + ' · received ' + inr(o.pay === 'PAID' ? o.price || 0 : o.paid || 0) + ' · due ' + inr(o.pay === 'PAID' ? 0 : Math.max(0, (o.price || 0) - (o.paid || 0))) + ' · ' + (o.pay === 'PAID' ? 'Fully paid' : 'Partly paid') + (p2 ? ' · ' + (it.part === 'balance' ? 'Payment 2 of 2' : 'Payment 1 of 2') : '') : '';
       const conf = () => this.proofSet(it, { Status: 'confirmed', By: u.id, At: Date.now() }, 'Confirmed', 'Confirmed ' + inr(it.amount) + ' in ' + VIA_L[it.via]);
       const rej = () => o.branch === 'puttur' ? this.openDialog('proofRej', { it: { oid: o.id, part: it.part }, reason: '', note: '', title: o.name || 'Customer', line: inr(it.amount) + ' · ' + VIA_L[it.via] + ' · ' + who(o) }) : this.ask('Mark this payment as not received? ' + (o.name || 'Customer') + ' · ' + inr(it.amount) + ' · ' + VIA_L[it.via] + '.', () => this.proofSet(it, { Status: 'rejected', By: u.id, At: Date.now() }, 'Rejected', 'Marked as not received'), 'Reject', true);
       const fix = () => this.openDialog('proofFix', { it: { oid: o.id, part: it.part }, reason: st === 'changes' ? (o[k + 'Reason'] || '') : '', note: st === 'changes' ? (o[k + 'Note'] || '') : '', title: o.name || 'Customer', line: inr(it.amount) + ' · ' + VIA_L[it.via] + ' · ' + who(o), edit: st === 'changes' });
       const undo = () => this.proofSet(it, { Status: 'pending', By: u.id, At: Date.now() }, 'Undo', 'Moved back to Awaiting');
-      const acts = st === 'pending' ? [...(it.proof ? [btn(p2 ? 'View both screenshots' : 'View screenshot', view)] : []), btn('Reject', rej, 'bad'), btn('Needs changes', fix, 'warn'), btn('Confirm received', conf, 'ok')]
-        : st === 'changes' ? [...(it.proof ? [btn('View screenshot', view)] : []), btn('Reject', rej, 'bad'), btn('Edit request', fix), btn(upd ? 'Updated → confirm' : 'Confirm received', conf, 'ok')] : [btn('Undo', undo)];
+      const vLbl = p2 ? 'View both payments' : nShots > 1 ? 'View ' + nShots + ' screenshots' : 'View screenshot', acts = st === 'pending' ? [...(it.proof ? [btn(vLbl, view)] : []), btn('Reject', rej, 'bad'), btn('Needs changes', fix, 'warn'), btn('Confirm received', conf, 'ok')]
+        : st === 'changes' ? [...(it.proof ? [btn(vLbl, view)] : []), btn('Reject', rej, 'bad'), btn('Edit request', fix), btn(upd ? 'Updated → confirm' : 'Confirm received', conf, 'ok')] : [btn('Undo', undo)];
       const skz = o.skzPay && +o.grossPrice ? 'Skilleaze Pay · gross ' + inr(o.grossPrice) + ' · fee ' + inr(Math.max(0, o.grossPrice - o.price)) + ' · net ' + inr(o.price) : '';
       const claim = +o[k + 'Amt'] > 0 && Math.round(+o[k + 'Amt']) !== Math.round(it.amount) ? ' · agent says ' + inr(+o[k + 'Amt']) + ' was received' : '';
       const byN = o[k + 'ByName'] || (o[k + 'By'] ? tc(o[k + 'By']) : '');
@@ -6998,7 +7017,7 @@ class V3A extends AppCore {
       return { hasPh: isP(it), phone: phTxt, tel: phOk ? 'tel:' + phTxt.replace(/[^\d+]/g, '') : undefined, phFg: phOk ? '#042d7c' : '#8a93a0', name: o.name || 'Customer', sub: (isP(it) ? 'Puttur' : 'Cloud') + ' · ' + who(o) + ' · ' + svcText(o) + paySum, when: fD(o.date) + (it.at ? ' · ' + new Date(it.at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }) : ''),
         channel: VIA_L[it.via] + (it.part === 'balance' ? ' · balance' : '') + (it.groupN > 1 ? ' · ' + it.groupN + ' orders, one payment' : ''), tag: T[0], tagBg: T[1], tagFg: T[2],
         amount: inr(it.amount), aed: o.currency === 'AED' ? 'AED ' + (it.part === 'first' && o.paidAed ? o.paidAed : o.aed) : o.currency === 'USD' ? '$' + (it.part === 'first' && o.paidUsd ? o.paidUsd : o.usd) : '', skz, hasSkz: !!skz,
-        hasProof: !!it.proof, noProof: !it.proof, thumbEl: it.proof ? React.createElement('img', { src: it.proof, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }) : null, view,
+        hasProof: !!it.proof, noProof: !it.proof, thumbEl: it.proof ? proofThumb(o, it.part) : null, view,
         hasFix: st === 'changes', fixTitle: 'What to fix: ' + (o[k + 'Reason'] || 'see note'), fixNote: o[k + 'Note'] || '', hasFixNote: !!o[k + 'Note'], fixBy: 'Sent back' + (byN ? ' by ' + byN : '') + (o[k + 'At'] ? ' · ' + fTm(o[k + 'At']) : ''),
         hasUpd: st === 'changes' && !!upd, updTxt: 'Updated by the agent ' + fTm(upd) + claim + ' · check it again',
         hasDone: (st === 'confirmed' || st === 'rejected') && !!o[k + 'At'], doneTxt: T[0] + (byN ? ' by ' + byN : '') + ' · ' + fTm(o[k + 'At']), actions: acts }; });
@@ -7056,9 +7075,9 @@ class V3A extends AppCore {
         { key: 'fix', label: 'What to fix', isInfo: true, info: (f.reason || 'See the note') + (f.note ? ' · ' + f.note : '') + (f.byName ? ' · from ' + f.byName : '') },
         { key: 'via', label: 'Payment received to', isChips: true, options: VIA.filter(([k]) => k !== 'paypal' || f.via === 'paypal').map(([k, l]) => chip('via', k, l, true)) },
         inp('amount', 'Amount received (₹)', 'number', 'What the customer actually paid'),
-        { key: 'img', label: 'Payment screenshot', isFile: true, hasImg: !!f.img, noImg: !f.img, imgEl: f.img ? React.createElement('img', { src: f.img, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }) : null,
+        ...(f.it && f.it.part !== 'balance' ? this.proofFields(f, 'A clear screenshot showing amount, date and name') : [{ key: 'img', label: 'Payment screenshot', isFile: true, hasImg: !!f.img, noImg: !f.img, imgEl: f.img ? React.createElement('img', { src: f.img, alt: '', style: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' } }) : null,
           fileTitle: f.newImg ? 'New screenshot added. Tap to change' : f.img ? 'Current screenshot. Tap to replace' : 'Upload payment screenshot', fileSub: f.newImg ? (f.imgName || 'image') : 'A clear screenshot showing amount, date and name', bd: f.newImg ? '#c6e6cf' : '#9db3de',
-          onFile: e => { const file = e.target.files && e.target.files[0]; if (!file) return; this.readProof(file, url => this.setState(s => ({ form: { ...s.form, img: url, newImg: true, imgName: file.name }, err: '' }))); } }] }; }
+          onFile: e => { const file = e.target.files && e.target.files[0]; if (!file) return; this.readProof(file, url => this.setState(s => ({ form: { ...s.form, img: url, newImg: true, imgName: file.name }, err: '' }))); } }])] }; }
     const o = ((this.state.data || {}).orders || []).find(x => x.id === f.id) || {};
     return { ...base, title: 'Delete order · ' + (o.name || ''), cta: 'Delete order', fields: [
       { key: 'who', label: 'Order', isInfo: true, info: (o.name || 'Customer') + (o.phone ? ' · ' + o.phone : '') + ' · ' + (svcText(o) || 'Order') + ' · ' + inr(o.price || 0) + ' · ' + fD(o.date) },
@@ -7078,9 +7097,11 @@ class V3A extends AppCore {
     if (t === 'proofUpd') { const it = this.proofItem(f.it); if (!it) { this.setState({ dialog: null }); return this.toast('Order not found'); }
       if (!this.canUpdPay(it.o)) return this.setState({ err: 'Only the agent who owns this order can update it.' });
       if (!f.via) return this.setState({ err: 'Choose where the payment was received.' }); const amt = +f.amount || 0;
-      const chVia = f.via !== it.via, chImg = !!f.newImg, chAmt = amt > 0 && Math.round(amt) !== Math.round(it.amount);
+      const multi = it.part !== 'balance' && Array.isArray(f.proofs), was = proofsOf(it.o, it.part), now0 = multi ? f.proofs.filter(Boolean).slice(0, PROOF_MAX) : [], chSet = multi && (now0.length !== was.length || now0.some((x, i) => x !== was[i]));
+      if (multi && !now0.length) return this.setState({ err: 'Add at least one payment screenshot.' });
+      const chVia = f.via !== it.via, chImg = !!f.newImg || chSet, chAmt = amt > 0 && Math.round(amt) !== Math.round(it.amount);
       if (!chVia && !chImg && !chAmt) return this.setState({ err: 'Change the account, the amount or the screenshot first.' });
-      const fields = { Upd: Date.now(), Amt: amt > 0 ? amt : undefined }; if (chVia) fields.via = f.via; if (chImg) fields.img = f.img; if (f.via === 'personal') fields.Status = undefined;
+      const fields = { Upd: Date.now(), Amt: amt > 0 ? amt : undefined }; if (chVia) fields.via = f.via; if (chImg) { if (multi) { fields.img = now0[0]; fields.imgs = now0.length > 1 ? now0 : undefined; } else fields.img = f.img; } if (f.via === 'personal') fields.Status = undefined;
       this.proofSet(it, fields, 'Agent updated: ' + [chVia && 'account → ' + VIA_L[f.via], chAmt && 'amount ' + inr(amt), chImg && 'new screenshot'].filter(Boolean).join(', '));
       if (this.pushOut && f.via !== 'personal') this.pushOut({ kind: 'payment', id: it.o.id, act: 'updated' });
       this.setState({ dialog: null }); return this.toast(f.via === 'personal' ? 'Moved to your personal account' : 'Sent for a second check'); }
@@ -7093,7 +7114,7 @@ class V3A extends AppCore {
     const byId = new Map((s.data.orders || []).map(o => [o.id, o]));
     const fixRow = r => { const o = r && r.id && byId.get(r.id); if (!o) return r; const parts = [o.proofStatus === 'changes' && o.via !== 'personal' && 'first', o.balanceProofStatus === 'changes' && 'balance'].filter(Boolean); if (!parts.length || !this.canUpdPay(o)) return r;
       const acts = parts.map(p => { const k = pfK(p), it = this.proofItem({ oid: o.id, part: p }); return { label: 'Update payment' + (p === 'balance' ? ' (balance)' : ''), bg: '#fdf0d9', fg: '#8a5300', bd: '#f0d49a',
-        fn: () => this.openDialog('proofUpd', { it: { oid: o.id, part: p }, via: it.via, amount: String(Math.round(+o[k + 'Amt'] || it.amount || 0)), img: o[k] || null, reason: o[k + 'Reason'] || '', note: o[k + 'Note'] || '', byName: o[k + 'ByName'] || '' }) }; });
+        fn: () => this.openDialog('proofUpd', { it: { oid: o.id, part: p }, via: it.via, amount: String(Math.round(+o[k + 'Amt'] || it.amount || 0)), img: o[k] || null, ...(p === 'balance' ? {} : { proofs: proofsOf(o, 'first'), proof: o[k] || '' }), reason: o[k + 'Reason'] || '', note: o[k + 'Note'] || '', byName: o[k + 'ByName'] || '' }) }; });
       const k0 = pfK(parts[0]), add = 'Needs changes: ' + (o[k0 + 'Reason'] || o[k0 + 'Note'] || 'see note') + (o[k0 + 'Upd'] ? ' · sent for re-check' : '');
       return { ...r, actions: [...acts, ...(r.actions || []).filter(a => !/^Update payment/.test(a.label))], hasActions: true, ...(typeof r.viaText === 'string' ? { viaText: r.viaText + ' · ' + add } : {}) }; };
     if (Array.isArray(v.orderRows)) v.orderRows = v.orderRows.map(fixRow);
@@ -7550,7 +7571,7 @@ class Component extends V3H {
       { label: 'Order', info: o.id + ' · ' + fD(o.date) + ' · ' + svcText(o) + (o.payGroupN > 1 ? ' · ' + o.payGroupN + ' CVs, one payment' : '') },
       { label: 'Amounts', info: 'Total ' + inr(price) + ' · received ' + inr(rec) + ' · pending ' + inr(due) },
       { label: 'Payment history', info: hist || 'No payment recorded' },
-      ...(o.proof ? [{ label: 'Payment 1 screenshot', img: o.proof }] : []), ...(o.balanceProof ? [{ label: 'Payment 2 screenshot', img: o.balanceProof }] : []),
+      ...proofItems(o, 'first', 'Payment 1 screenshot'), ...(o.balanceProof ? [{ label: 'Payment 2 screenshot', img: o.balanceProof }] : []),
       { label: 'What to do', info: 'Check the amount with the customer, then use Edit on this order in My orders (shown behind this window) to correct it or upload the right screenshot.' }];
     this.setState({ view: 'p_orders', pOrdQ: o.phone || o.name || '', pDate: { k: 'all' }, of: 'all', ofBy: 'all', showN: 0, moreOpen: false });
     if (typeof window !== 'undefined') window.scrollTo(0, 0);
